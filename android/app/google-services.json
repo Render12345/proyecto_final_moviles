@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "788933474155",
+    "firebase_url": "https://aire-acondicionado-itc-default-rtdb.firebaseio.com",
+    "project_id": "aire-acondicionado-itc",
+    "storage_bucket": "aire-acondicionado-itc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:788933474155:android:d133ec9ff3b18115adbe2e",
+        "android_client_info": {
+          "package_name": "com.example.proyecto_final_moviles"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "788933474155-bqk6p53cscukkrr9uelnd4cjkbfeh912.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyApKX_DSlmmeOuxSJbd2Wffp8oko2sotE4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "788933474155-bqk6p53cscukkrr9uelnd4cjkbfeh912.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "788933474155-2tqb3mfjsjovk946vto6n18jedpsgu0n.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.proyectoFinalMoviles"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
