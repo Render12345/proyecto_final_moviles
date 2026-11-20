@@ -1,131 +1,331 @@
 import 'package:flutter/material.dart';
-import 'package:proyecto_final_moviles/config/email_auth.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/auth_provider.dart';
 
-
-class LogginScreen extends StatefulWidget {
-  const LogginScreen({super.key});
+class LoginScreen extends ConsumerStatefulWidget {
+  const LoginScreen({super.key});
 
   @override
-  State<LogginScreen> createState() => _LogginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LogginScreenState extends State<LogginScreen> {
-  EmailAuth? _emailAuth;
-  final conUsaer = TextEditingController();
-  final conPwd = TextEditingController();
-  bool isLoading = false;
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _nombreCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-    _emailAuth = EmailAuth();
+  void dispose() {
+    _nombreCtrl.dispose();
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  void _mostrarMensaje(String msg, {bool esError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: esError ? Colors.red.shade700 : Colors.green.shade700,
+      ),
+    );
+  }
+
+  Future<void> _submitCorreo() async {
+    if (!_formKey.currentState!.validate()) return;
+    final uiNotifier = ref.read(loginUiProvider.notifier);
+    final authService = ref.read(authServiceProvider);
+    final isRegister = ref.read(loginUiProvider).isRegisterMode;
+
+    uiNotifier.setLoading(true);
+    try {
+      if (isRegister) {
+        await authService.registrarConCorreo(
+          nombre: _nombreCtrl.text,
+          email: _emailCtrl.text,
+          password: _passCtrl.text,
+        );
+        _mostrarMensaje(
+          'Cuenta creada. Revisa tu correo para verificarla.',
+        );
+      } else {
+        await authService.loginConCorreo(_emailCtrl.text, _passCtrl.text);
+      }
+    } catch (e) {
+      _mostrarMensaje('Error: $e', esError: true);
+    } finally {
+      if (mounted) uiNotifier.setLoading(false);
+    }
+  }
+
+  void _dialogoRecuperarPassword() {
+    final resetCtrl = TextEditingController(text: _emailCtrl.text);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Recuperar contraseña'),
+        content: TextField(
+          controller: resetCtrl,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            labelText: 'Ingresa tu correo registrado',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (resetCtrl.text.trim().isEmpty) return;
+              try {
+                await ref
+                    .read(authServiceProvider)
+                    .recuperarPassword(resetCtrl.text);
+                if (ctx.mounted) Navigator.pop(ctx);
+                _mostrarMensaje('Correo de recuperación enviado.');
+              } catch (e) {
+                _mostrarMensaje('Error: $e', esError: true);
+              }
+            },
+            child: const Text('Enviar enlace'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-
-    final txtUser = TextFormField(
-      controller: conUsaer,
-      decoration: InputDecoration(
-        border: OutlineInputBorder()
-      ),
-    );
-    final txtPwd = TextFormField(
-      controller: conPwd,
-      obscureText: true,
-      decoration: InputDecoration(
-        border: OutlineInputBorder()
-      ),
-    );
-
-    final loading = Positioned(
-      top: 150,
-      child: CircularProgressIndicator()
-    );
-
-    final btnLogin = ElevatedButton(
-      onPressed: (){
-        isLoading = !isLoading;
-        setState(() {});
-        //Future.delayed(
-        //  Duration(seconds: 4)
-        //).then((value) {
-        //  Navigator.pushNamed(context, "/dash");
-        // isLoading = false;
-        //  setState(() {});
-        //});
-        _emailAuth!.m_loginUser(user: conUsaer.text, password: conPwd.text).then((value) {
-          if(value){
-            Navigator.pushNamed(context, "/dash");
-          }else{
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Usuario o contraseña incorrectos'),
-                duration: Duration(seconds: 3)
-              ),
-            );
-          }
-          isLoading = false;
-          setState(() {});
-        },);
-      },
-      child: Row(
-        children: [
-          Icon(Icons.login),
-          Text('Iniciar sesion')
-        ],
-      )
-    );
-
-    final space = Container(height: 5,);
-    final space2 = SizedBox(height: 5,); 
+    final uiState = ref.watch(loginUiProvider);
+    final uiNotifier = ref.read(loginUiProvider.notifier);
+    final authService = ref.read(authServiceProvider);
 
     return Scaffold(
-      body: Container(
-        height: MediaQuery.of(context).size.height,
-        width: MediaQuery.of(context).size.width,
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            fit: BoxFit.cover,
-            image: AssetImage('assets/fondo.jpg')
-          )
-        ),
-        child: Stack(
-          alignment: AlignmentGeometry.center,
-          children: [
-            Image.asset('assets/logo.png', height: 200,),
-            Positioned(
-              bottom: 70,
-              child: Container(
-                padding: EdgeInsets.all(8),
-                child: Column(
-                  children: [
-                    txtUser,
-                    Divider(),
-                    txtPwd,
-                    space2,
-                    btnLogin,
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/register');
-                      },
-                      child: Text('Crear una cuenta'),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(Icons.ac_unit_rounded, size: 72, color: Colors.blue),
+                  const SizedBox(height: 12),
+                  Text(
+                    uiState.isRegisterMode ? 'Crear Cuenta' : 'Control Aires ITC',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 24),
+                  if (uiState.isRegisterMode) ...[
+                    TextFormField(
+                      controller: _nombreCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre completo',
+                        prefixIcon: Icon(Icons.person_outline),
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Ingresa tu nombre' : null,
                     ),
+                    const SizedBox(height: 16),
                   ],
-                ),
-                height: 245,
-                width: MediaQuery.of(context).size.width * .9,
-                decoration: BoxDecoration(
-
-                  borderRadius: BorderRadiusDirectional.circular(20),
-                  color: Color(0x99FFFFFF)
-                )
+                  TextFormField(
+                    controller: _emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Correo electrónico',
+                      prefixIcon: Icon(Icons.email_outlined),
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) =>
+                        (v == null || !v.contains('@')) ? 'Correo inválido' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passCtrl,
+                    obscureText: uiState.obscurePassword,
+                    decoration: InputDecoration(
+                      labelText: 'Contraseña',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          uiState.obscurePassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                        onPressed: uiNotifier.toggleObscurePassword,
+                      ),
+                    ),
+                    validator: (v) =>
+                        (v == null || v.length < 6) ? 'Mínimo 6 caracteres' : null,
+                  ),
+                  if (!uiState.isRegisterMode)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _dialogoRecuperarPassword,
+                        child: const Text('¿Olvidaste tu contraseña?'),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: uiState.isLoading ? null : _submitCorreo,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: uiState.isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            uiState.isRegisterMode ? 'Registrarse' : 'Iniciar Sesión',
+                          ),
+                  ),
+                  TextButton(
+                    onPressed: uiNotifier.toggleRegisterMode,
+                    child: Text(
+                      uiState.isRegisterMode
+                          ? '¿Ya tienes cuenta? Inicia sesión'
+                          : '¿No tienes cuenta? Regístrate aquí',
+                    ),
+                  ),
+                  const Divider(height: 32),
+                  OutlinedButton.icon(
+                    onPressed: uiState.isLoading
+                        ? null
+                        : () async {
+                            uiNotifier.setLoading(true);
+                            try {
+                              await authService.loginConGoogle();
+                            } catch (e) {
+                              _mostrarMensaje('Error Google: $e', esError: true);
+                            } finally {
+                              if (mounted) uiNotifier.setLoading(false);
+                            }
+                          },
+                    icon: const Icon(Icons.g_mobiledata, size: 28),
+                    label: const Text('Continuar con Google'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: uiState.isLoading
+                        ? null
+                        : () async {
+                            uiNotifier.setLoading(true);
+                            try {
+                              await authService.loginConGitHub();
+                            } catch (e) {
+                              _mostrarMensaje('Error GitHub: $e', esError: true);
+                            } finally {
+                              if (mounted) uiNotifier.setLoading(false);
+                            }
+                          },
+                    icon: const Icon(Icons.code),
+                    label: const Text('Continuar con GitHub'),
+                  ),
+                ],
               ),
             ),
-            isLoading ? loading : Container()
-          ],
+          ),
         ),
-      )
+      ),
+    );
+  }
+}
+
+class VerifyEmailScreen extends ConsumerWidget {
+  const VerifyEmailScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authService = ref.read(authServiceProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Verificar Correo'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () => authService.cerrarSesion(),
+          ),
+        ],
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.mark_email_unread_outlined,
+                size: 80,
+                color: Colors.orange,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Confirma tu correo electrónico',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Enviamos un enlace de verificación a ${authService.currentUser?.email ?? ''}. Debes confirmarlo para continuar.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: () async {
+                  final verificado =
+                      await authService.verificarSiYaConfirmoCorreo();
+                  if (!verificado && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Aún no aparece verificado. Revisa tu bandeja o spam.',
+                        ),
+                      ),
+                    );
+                  } else if (verificado) {
+                    ref.invalidate(firebaseAuthStateProvider);
+                  }
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Ya verifiqué mi correo'),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () async {
+                  await authService.reenviarVerificacion();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Correo de verificación reenviado.'),
+                      ),
+                    );
+                  }
+                },
+                child: const Text('Reenviar correo de confirmación'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
