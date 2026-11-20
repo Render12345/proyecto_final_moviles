@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../config/email_auth.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 
@@ -12,19 +11,9 @@ class AdminUsersScreen extends ConsumerWidget {
     WidgetRef ref, {
     UserModel? usuarioEditar,
   }) {
-    showDialog<void>(
+    showDialog(
       context: context,
       builder: (_) => _FormularioUsuarioDialog(usuarioEditar: usuarioEditar),
-    );
-  }
-
-  void _mostrarError(BuildContext context, Object error) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Error: $error'),
-        backgroundColor: Colors.red,
-      ),
     );
   }
 
@@ -35,101 +24,92 @@ class AdminUsersScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gestión de Usuarios'),
+        title: const Text('Gestión de Usuarios (CRUD)'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Cerrar sesión',
-            onPressed: () async {
-              try {
-                await authService.cerrarSesion();
-              } catch (error) {
-                _mostrarError(context, error);
-              }
-            },
+            onPressed: () => authService.cerrarSesion(),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _abrirFormularioUsuario(context, ref),
         icon: const Icon(Icons.person_add),
-        label: const Text('Nuevo usuario'),
+        label: const Text('Nuevo Usuario'),
       ),
       body: usersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) =>
-            Center(child: Text('Error al cargar usuarios: $error')),
+        error: (err, _) => Center(child: Text('Error al cargar usuarios: $err')),
         data: (usuarios) {
           if (usuarios.isEmpty) {
             return const Center(child: Text('No hay usuarios registrados.'));
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.only(
-              bottom: 88,
-              top: 8,
-              left: 12,
-              right: 12,
-            ),
+            padding: const EdgeInsets.only(bottom: 88, top: 8, left: 12, right: 12),
             itemCount: usuarios.length,
             itemBuilder: (context, index) {
-              final usuario = usuarios[index];
+              final u = usuarios[index];
+              final esAdmin = u.role == 'admin';
+
               return Card(
                 child: ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.person),
+                  leading: CircleAvatar(
+                    backgroundColor: esAdmin ? Colors.indigo : Colors.teal,
+                    child: Icon(
+                      esAdmin ? Icons.admin_panel_settings : Icons.person,
+                      color: Colors.white,
+                    ),
                   ),
-                  title: Text(
-                    usuario.nombre.isEmpty ? 'Sin nombre' : usuario.nombre,
-                  ),
+                  title: Text(u.nombre.isEmpty ? 'Sin nombre' : u.nombre),
                   subtitle: Text(
-                    '${usuario.email}\n'
-                    'Tarjeta ficticia: ${usuario.cardNumber.isEmpty ? "Sin asignar" : usuario.cardNumber}\n'
-                    'Acceso: ${usuario.autorizado ? "Activo" : "Pendiente"}',
+                    '${u.email}\nRol: ${u.role.toUpperCase()} • Acceso: ${u.autorizado ? "Activo" : "Pendiente"}',
                   ),
                   isThreeLine: true,
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Switch(
-                        value: usuario.autorizado,
-                        onChanged: (autorizado) async {
-                          try {
-                            await authService.adminActualizarUsuario(
-                              uid: usuario.uid,
-                              nombre: usuario.nombre,
-                              email: usuario.email,
-                              autorizado: autorizado,
-                            );
-                          } catch (error) {
-                            if (context.mounted) {
-                              _mostrarError(context, error);
-                            }
-                          }
-                        },
+                        value: u.autorizado,
+                        onChanged: (val) => authService.adminActualizarUsuario(
+                          uid: u.uid,
+                          nombre: u.nombre,
+                          role: u.role,
+                          autorizado: val,
+                        ),
                       ),
-                      PopupMenuButton<String>(
-                        onSelected: (action) {
-                          if (action == 'edit') {
-                            _abrirFormularioUsuario(
-                              context,
-                              ref,
-                              usuarioEditar: usuario,
-                            );
-                          } else if (action == 'delete') {
-                            _confirmarEliminacion(context, authService, usuario);
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        onPressed: () =>
+                            _abrirFormularioUsuario(context, ref, usuarioEditar: u),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () async {
+                          final confirmar = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Eliminar usuario'),
+                              content: Text(
+                                '¿Seguro que deseas eliminar el registro de ${u.email}?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('No'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('Sí, eliminar'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmar == true) {
+                            await authService.adminEliminarUsuario(u.uid);
                           }
                         },
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Text('Editar'),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Eliminar'),
-                          ),
-                        ],
                       ),
                     ],
                   ),
@@ -141,48 +121,11 @@ class AdminUsersScreen extends ConsumerWidget {
       ),
     );
   }
-
-  Future<void> _confirmarEliminacion(
-    BuildContext context,
-    AuthService authService,
-    UserModel usuario,
-  ) async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Eliminar usuario'),
-        content: Text('¿Eliminar la cuenta de ${usuario.email}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (confirmar != true) return;
-
-    try {
-      await authService.adminEliminarUsuario(usuario.uid);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Usuario eliminado.')),
-        );
-      }
-    } catch (error) {
-      _mostrarError(context, error);
-    }
-  }
 }
 
 class _FormularioUsuarioDialog extends ConsumerStatefulWidget {
-  const _FormularioUsuarioDialog({this.usuarioEditar});
-
   final UserModel? usuarioEditar;
+  const _FormularioUsuarioDialog({this.usuarioEditar});
 
   @override
   ConsumerState<_FormularioUsuarioDialog> createState() =>
@@ -191,10 +134,10 @@ class _FormularioUsuarioDialog extends ConsumerStatefulWidget {
 
 class _FormularioUsuarioDialogState
     extends ConsumerState<_FormularioUsuarioDialog> {
-  final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nombreCtrl;
   late final TextEditingController _emailCtrl;
   late final TextEditingController _passCtrl;
+  late String _rolSeleccionado;
   late bool _autorizado;
   bool _guardando = false;
 
@@ -203,14 +146,11 @@ class _FormularioUsuarioDialogState
   @override
   void initState() {
     super.initState();
-    _nombreCtrl = TextEditingController(
-      text: widget.usuarioEditar?.nombre ?? '',
-    );
-    _emailCtrl = TextEditingController(
-      text: widget.usuarioEditar?.email ?? '',
-    );
+    _nombreCtrl = TextEditingController(text: widget.usuarioEditar?.nombre ?? '');
+    _emailCtrl = TextEditingController(text: widget.usuarioEditar?.email ?? '');
     _passCtrl = TextEditingController();
-    _autorizado = widget.usuarioEditar?.autorizado ?? false;
+    _rolSeleccionado = widget.usuarioEditar?.role ?? 'user';
+    _autorizado = widget.usuarioEditar?.autorizado ?? true;
   }
 
   @override
@@ -221,110 +161,60 @@ class _FormularioUsuarioDialogState
     super.dispose();
   }
 
-  Future<void> _guardar() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _guardando = true);
-    final authService = ref.read(authServiceProvider);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      String? cardNumber;
-      if (_esEdicion) {
-        await authService.adminActualizarUsuario(
-          uid: widget.usuarioEditar!.uid,
-          nombre: _nombreCtrl.text,
-          email: _emailCtrl.text,
-          autorizado: _autorizado,
-        );
-      } else {
-        cardNumber = await authService.adminCrearUsuario(
-          nombre: _nombreCtrl.text,
-          email: _emailCtrl.text,
-          password: _passCtrl.text,
-          autorizado: _autorizado,
-        );
-      }
-
-      if (!mounted) return;
-      Navigator.pop(context);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            _esEdicion
-                ? 'Usuario actualizado.'
-                : 'Usuario creado. Tarjeta ficticia: $cardNumber. '
-                    'Se envió el correo de verificación.',
-          ),
-        ),
-      );
-    } catch (error) {
-      if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Error: $error'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(_esEdicion ? 'Editar usuario' : 'Dar de alta usuario'),
-      content: SizedBox(
-        width: 360,
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _nombreCtrl,
-                  decoration: const InputDecoration(labelText: 'Nombre completo'),
-                  validator: (value) => (value?.trim().isEmpty ?? true)
-                      ? 'Ingresa un nombre.'
-                      : null,
+      title: Text(_esEdicion ? 'Editar Usuario' : 'Dar de Alta Usuario'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nombreCtrl,
+              decoration: const InputDecoration(labelText: 'Nombre completo'),
+            ),
+            const SizedBox(height: 12),
+            if (!_esEdicion) ...[
+              TextField(
+                controller: _emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Correo electrónico'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _passCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Contraseña inicial (mín. 6)',
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Correo electrónico'),
-                  validator: (value) {
-                    final email = value?.trim() ?? '';
-                    return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)
-                        ? null
-                        : 'Ingresa un correo válido.';
-                  },
+              ),
+              const SizedBox(height: 12),
+            ],
+            DropdownButtonFormField<String>(
+              value: _rolSeleccionado,
+              decoration: const InputDecoration(labelText: 'Rol en el sistema'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'user',
+                  child: Text('Usuario Normal (Laboratorio)'),
                 ),
-                if (!_esEdicion) ...[
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _passCtrl,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Contraseña inicial (mín. 6)',
-                    ),
-                    validator: (value) => (value?.length ?? 0) >= 6
-                        ? null
-                        : 'La contraseña debe tener al menos 6 caracteres.',
-                  ),
-                ],
-                const SizedBox(height: 8),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Autorizado para encender aires'),
-                  value: _autorizado,
-                  onChanged: (value) => setState(() => _autorizado = value),
+                DropdownMenuItem(
+                  value: 'admin',
+                  child: Text('Administrador'),
                 ),
               ],
+              onChanged: (val) {
+                if (val != null) setState(() => _rolSeleccionado = val);
+              },
             ),
-          ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Autorizado para encender aires'),
+              value: _autorizado,
+              onChanged: (val) => setState(() => _autorizado = val),
+            ),
+          ],
         ),
       ),
       actions: [
@@ -333,12 +223,60 @@ class _FormularioUsuarioDialogState
           child: const Text('Cancelar'),
         ),
         FilledButton(
-          onPressed: _guardando ? null : _guardar,
+          onPressed: _guardando
+              ? null
+              : () async {
+                  setState(() => _guardando = true);
+                  final authService = ref.read(authServiceProvider);
+                  try {
+                    if (_esEdicion) {
+                      await authService.adminActualizarUsuario(
+                        uid: widget.usuarioEditar!.uid,
+                        nombre: _nombreCtrl.text,
+                        role: _rolSeleccionado,
+                        autorizado: _autorizado,
+                      );
+                    } else {
+                      await authService.adminCrearUsuario(
+                        nombre: _nombreCtrl.text,
+                        email: _emailCtrl.text,
+                        password: _passCtrl.text,
+                        role: _rolSeleccionado,
+                        autorizado: _autorizado,
+                      );
+                    }
+                    if (context.mounted) Navigator.pop(context);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            _esEdicion
+                                ? 'Usuario actualizado'
+                                : 'Usuario dado de alta',
+                          ),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  } finally {
+                    if (mounted) setState(() => _guardando = false);
+                  }
+                },
           child: _guardando
-              ? const SizedBox.square(
-                  dimension: 18,
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
+                    color: Colors.white,
                   ),
                 )
               : Text(_esEdicion ? 'Guardar cambios' : 'Crear usuario'),

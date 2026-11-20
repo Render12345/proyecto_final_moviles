@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'screens/login_screen.dart';
@@ -101,33 +102,10 @@ class MyApp extends ConsumerWidget {
                   ],
                 ),
                 body: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          userData.autorizado
-                              ? 'Usuario autorizado: Listo para escanear QR'
-                              : 'Cuenta pendiente de aprobación por un administrador',
-                          textAlign: TextAlign.center,
-                        ),
-                        if (userData.cardNumber.isNotEmpty) ...[
-                          const SizedBox(height: 20),
-                          const Icon(Icons.credit_card, size: 36),
-                          const SizedBox(height: 8),
-                          const Text('Tarjeta ficticia de demostración'),
-                          SelectableText(
-                            userData.cardNumber,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const Text(
-                            'No es una tarjeta de pago.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ],
-                    ),
+                  child: Text(
+                    userData.autorizado
+                        ? 'Usuario autorizado: Listo para escanear QR'
+                        : 'Cuenta pendiente de aprobación por un administrador',
                   ),
                 ),
               );

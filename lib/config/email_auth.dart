@@ -1,7 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../firebase_options.dart';
 import '../models/user_model.dart';
@@ -9,10 +8,8 @@ import '../models/user_model.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   bool _googleInitialized = false;
-  FirebaseApp? _verificationApp;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
   User? get currentUser => _auth.currentUser;
@@ -28,7 +25,7 @@ class AuthService {
   Future<UserCredential> loginConCorreo(String email, String password) async {
     return await _auth.signInWithEmailAndPassword(
       email: email.trim(),
-      password: password,
+      password: password.trim(),
     );
   }
 
@@ -40,7 +37,7 @@ class AuthService {
   }) async {
     final cred = await _auth.createUserWithEmailAndPassword(
       email: email.trim(),
-      password: password,
+      password: password.trim(),
     );
 
     final user = cred.user;
@@ -48,36 +45,23 @@ class AuthService {
       throw Exception('No se pudo obtener el usuario creado.');
     }
 
-    try {
-      await user.updateDisplayName(nombre.trim());
-      await user.sendEmailVerification();
+    await user.updateDisplayName(nombre.trim());
+    await user.sendEmailVerification();
 
-      final nuevoUsuario = UserModel(
-        uid: user.uid,
-        nombre: nombre.trim(),
-        email: email.trim(),
-        fotoUrl: '',
-        provider: 'password',
-        role: 'user',
-        autorizado: false,
-        planSuscripcion: 'ninguno',
-        dispositivosVinculados: {},
-      );
+    final nuevoUsuario = UserModel(
+      uid: user.uid,
+      nombre: nombre.trim(),
+      email: email.trim(),
+      fotoUrl: '',
+      provider: 'password',
+      role: 'user',
+      autorizado: false,
+      planSuscripcion: 'ninguno',
+      dispositivosVinculados: {},
+    );
 
-      await _db.child('users/${user.uid}').set(nuevoUsuario.toMap());
-      return cred;
-    } catch (error, stackTrace) {
-      try {
-        await user.delete();
-        await _auth.signOut();
-      } catch (cleanupError) {
-        throw StateError(
-          'Falló el registro ($error) y no se pudo limpiar la cuenta '
-          'incompleta ($cleanupError).',
-        );
-      }
-      Error.throwWithStackTrace(error, stackTrace);
-    }
+    await _db.child('users/${user.uid}').set(nuevoUsuario.toMap());
+    return cred;
   }
 
   // 3. REENVIAR CORREO DE VERIFICACIÓN Y RECARGAR ESTADO
@@ -146,107 +130,84 @@ class AuthService {
         planSuscripcion: 'ninguno',
         dispositivosVinculados: {},
       );
-      try {
-        await ref.set(nuevo.toMap());
-      } catch (error, stackTrace) {
-        try {
-          await _auth.signOut();
-        } catch (cleanupError) {
-          throw StateError(
-            'No se pudo guardar el perfil ($error) y tampoco cerrar la '
-            'sesión incompleta ($cleanupError).',
-          );
-        }
-        Error.throwWithStackTrace(error, stackTrace);
-      }
+      await ref.set(nuevo.toMap());
     }
   }
 
-  Future<FirebaseAuth> _getVerificationAuth() async {
-    final app = _verificationApp ??= await Firebase.initializeApp(
-      name: 'UserVerification',
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    return FirebaseAuth.instanceFor(app: app);
-  }
-
-  Future<String> adminCrearUsuario({
+  // 7. CRUD ADMIN: DAR DE ALTA USUARIO SIN CERRAR SESIÓN DEL ADMIN
+  Future<void> adminCrearUsuario({
     required String nombre,
     required String email,
     required String password,
+    required String role, // 'user' o 'admin'
     required bool autorizado,
   }) async {
-    final result = await _functions.httpsCallable('adminCreateUser').call({
-      'displayName': nombre.trim(),
-      'email': email.trim(),
-      'password': password,
-      'authorized': autorizado,
-    });
-    final data = Map<Object?, Object?>.from(result.data as Map);
-    final uid = data['uid'] as String;
-    final cardNumber = data['cardNumber'] as String;
-
-    FirebaseAuth? secondaryAuth;
+    FirebaseApp? secondaryApp;
     try {
-      secondaryAuth = await _getVerificationAuth();
-      final credential = await secondaryAuth.signInWithEmailAndPassword(
-        email: email.trim(),
-        password: password,
+      secondaryApp = await Firebase.initializeApp(
+        name: 'SecondaryApp',
+        options: DefaultFirebaseOptions.currentPlatform,
       );
-      final createdUser = credential.user;
+
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+      final cred = await secondaryAuth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password.trim(),
+      );
+
+      final createdUser = cred.user;
       if (createdUser == null) {
-        throw StateError('No se pudo obtener la cuenta creada.');
+        throw Exception('No se pudo crear el usuario secundario.');
       }
+
+      await createdUser.updateDisplayName(nombre.trim());
       await createdUser.sendEmailVerification();
+
+      final nuevoUsuario = UserModel(
+        uid: createdUser.uid,
+        nombre: nombre.trim(),
+        email: email.trim(),
+        fotoUrl: '',
+        provider: 'password',
+        role: role,
+        autorizado: autorizado,
+        planSuscripcion: 'ninguno',
+        dispositivosVinculados: {},
+      );
+
+      await _db.child('users/${createdUser.uid}').set(nuevoUsuario.toMap());
       await secondaryAuth.signOut();
-      return cardNumber;
-    } catch (error, stackTrace) {
-      Object? cleanupError;
-      if (secondaryAuth?.currentUser != null) {
-        try {
-          await secondaryAuth!.signOut();
-        } catch (signOutError) {
-          cleanupError = signOutError;
-        }
+    } finally {
+      if (secondaryApp != null) {
+        await secondaryApp.delete();
       }
-      try {
-        await _functions.httpsCallable('adminDeleteUser').call({'uid': uid});
-      } catch (deleteError) {
-        cleanupError ??= deleteError;
-      }
-      if (cleanupError != null) {
-        throw StateError(
-          'No se pudo completar la verificación del correo ($error) y la '
-          'limpieza de la cuenta también falló ($cleanupError).',
-        );
-      }
-      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
+  // CRUD ADMIN: ACTUALIZAR ROL Y AUTORIZACIÓN
   Future<void> adminActualizarUsuario({
     required String uid,
     required String nombre,
-    required String email,
+    required String role,
     required bool autorizado,
   }) async {
-    await _functions.httpsCallable('adminUpdateUser').call({
-      'uid': uid,
-      'displayName': nombre.trim(),
-      'email': email.trim(),
-      'authorized': autorizado,
+    await _db.child('users/$uid').update({
+      'nombre': nombre.trim(),
+      'role': role,
+      'autorizado': autorizado,
     });
   }
 
+  // CRUD ADMIN: ELIMINAR REGISTRO DEL USUARIO EN REALTIME DATABASE
   Future<void> adminEliminarUsuario(String uid) async {
-    await _functions.httpsCallable('adminDeleteUser').call({'uid': uid});
+    await _db.child('users/$uid').remove();
   }
 
   Future<void> cerrarSesion() async {
-    if (_googleInitialized) {
+    try {
       await _ensureGoogleInitialized();
       await _googleSignIn.signOut();
-    }
+    } catch (_) {}
     await _auth.signOut();
   }
 }

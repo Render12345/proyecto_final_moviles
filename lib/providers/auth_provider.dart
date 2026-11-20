@@ -43,7 +43,6 @@ final allUsersProvider = StreamProvider<List<UserModel>>((ref) {
             e.value as Map<dynamic, dynamic>,
           ),
         )
-          .where((user) => user.role == 'user')
         .toList();
   });
 });

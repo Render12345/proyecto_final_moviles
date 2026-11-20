@@ -4,11 +4,10 @@ class UserModel {
   final String email;
   final String fotoUrl;
   final String provider;
-  final String role;
+  final String role; // 'admin' o 'user'
   final bool autorizado;
   final String planSuscripcion;
   final Map<String, bool> dispositivosVinculados;
-  final String cardNumber;
 
   UserModel({
     required this.uid,
@@ -20,7 +19,6 @@ class UserModel {
     required this.autorizado,
     required this.planSuscripcion,
     required this.dispositivosVinculados,
-    this.cardNumber = '',
   });
 
   factory UserModel.fromMap(String uid, Map<dynamic, dynamic> map) {
@@ -40,7 +38,6 @@ class UserModel {
       autorizado: map['autorizado'] == true,
       planSuscripcion: map['plan_suscripcion']?.toString() ?? 'ninguno',
       dispositivosVinculados: vinculados,
-      cardNumber: map['card_number']?.toString() ?? '',
     );
   }
 
@@ -54,7 +51,6 @@ class UserModel {
       'autorizado': autorizado,
       'plan_suscripcion': planSuscripcion,
       'dispositivos_vinculados': dispositivosVinculados,
-      if (cardNumber.isNotEmpty) 'card_number': cardNumber,
     };
   }
 }
