@@ -1,11 +1,17 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import '../config/email_auth.dart';
 import '../models/user_model.dart';
+import '../services/storage_service.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
+
+final storageServiceProvider = Provider<StorageService>((ref) => StorageService());
+
+final isLoggingOutProvider = StateProvider<bool>((ref) => false);
 
 final firebaseAuthStateProvider = StreamProvider<User?>((ref) {
   return ref.watch(authServiceProvider).authStateChanges;
@@ -84,3 +90,38 @@ class LoginUiNotifier extends StateNotifier<LoginUiState> {
 final loginUiProvider = StateNotifierProvider<LoginUiNotifier, LoginUiState>(
   (ref) => LoginUiNotifier(),
 );
+
+class PerfilUploadNotifier extends StateNotifier<AsyncValue<String?>> {
+  PerfilUploadNotifier(this._ref) : super(const AsyncData(null));
+
+  final Ref _ref;
+
+  Future<void> actualizarFotoPerfil({
+    required String uid,
+    File? archivoMovil,
+    Uint8List? bytesWeb,
+  }) async {
+    state = const AsyncLoading();
+    try {
+      final url = await _ref.read(storageServiceProvider).subirImagen(
+            carpeta: 'perfiles',
+            nombreArchivo: uid,
+            archivoMovil: archivoMovil,
+            bytesWeb: bytesWeb,
+          );
+
+      await FirebaseDatabase.instance.ref('users/$uid').update({
+        'foto_url': url,
+      });
+
+      state = AsyncData(url);
+    } catch (e, st) {
+      state = AsyncError(e, st);
+    }
+  }
+}
+
+final perfilUploadProvider =
+    StateNotifierProvider<PerfilUploadNotifier, AsyncValue<String?>>((ref) {
+  return PerfilUploadNotifier(ref);
+});

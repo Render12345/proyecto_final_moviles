@@ -84,32 +84,61 @@ class AuthService {
     await _auth.sendPasswordResetEmail(email: email.trim());
   }
 
+  // Vincular la credencial pendiente si ya existe sesión activa
+  Future<UserCredential?> vincularCredencialPendiente(
+    AuthCredential credential,
+  ) async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    return await user.linkWithCredential(credential);
+  }
+
   // 5. INICIO DE SESIÓN CON GOOGLE (google_sign_in v7+)
   Future<UserCredential?> loginConGoogle() async {
-    await _ensureGoogleInitialized();
+    try {
+      await _ensureGoogleInitialized();
 
-    final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
-    final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
-    final AuthCredential credential = GoogleAuthProvider.credential(
-      idToken: googleAuth.idToken,
-    );
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        idToken: googleAuth.idToken,
+      );
 
-    final userCred = await _auth.signInWithCredential(credential);
-    if (userCred.user != null) {
-      await _guardarUsuarioOAuthSiNoExiste(userCred.user!, 'google.com');
+      final userCred = await _auth.signInWithCredential(credential);
+      if (userCred.user != null) {
+        await _guardarUsuarioOAuthSiNoExiste(userCred.user!, 'google.com');
+      }
+      return userCred;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'account-exists-with-different-credential') {
+        throw Exception(
+          'Este correo ya está registrado con otro método de acceso. '
+          'Inicia sesión con el proveedor que usaste originalmente.',
+        );
+      }
+      rethrow;
     }
-    return userCred;
   }
 
   // 6. INICIO DE SESIÓN CON GITHUB
   Future<UserCredential?> loginConGitHub() async {
-    final GithubAuthProvider githubProvider = GithubAuthProvider();
-    final userCred = await _auth.signInWithProvider(githubProvider);
-    if (userCred.user != null) {
-      await _guardarUsuarioOAuthSiNoExiste(userCred.user!, 'github.com');
+    try {
+      final GithubAuthProvider githubProvider = GithubAuthProvider();
+      final userCred = await _auth.signInWithProvider(githubProvider);
+      if (userCred.user != null) {
+        await _guardarUsuarioOAuthSiNoExiste(userCred.user!, 'github.com');
+      }
+      return userCred;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'account-exists-with-different-credential') {
+        throw Exception(
+          'Este correo ya está asociado a otro proveedor. '
+          'Inicia sesión con el método con el que entraste por primera vez.',
+        );
+      }
+      rethrow;
     }
-    return userCred;
   }
 
   Future<void> _guardarUsuarioOAuthSiNoExiste(
@@ -139,7 +168,7 @@ class AuthService {
     required String nombre,
     required String email,
     required String password,
-    required String role, // 'user' o 'admin'
+    required String role,
     required bool autorizado,
   }) async {
     FirebaseApp? secondaryApp;
@@ -203,11 +232,12 @@ class AuthService {
     await _db.child('users/$uid').remove();
   }
 
+  // CERRAR SESIÓN SIN BLOQUEOS
   Future<void> cerrarSesion() async {
+    await _auth.signOut();
     try {
       await _ensureGoogleInitialized();
       await _googleSignIn.signOut();
     } catch (_) {}
-    await _auth.signOut();
   }
 }
