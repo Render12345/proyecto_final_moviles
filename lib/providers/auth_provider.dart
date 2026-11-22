@@ -1,15 +1,18 @@
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../config/email_auth.dart';
-import '../models/user_model.dart';
-import '../services/storage_service.dart';
+import 'package:flutter_riverpod/legacy.dart';
+import 'package:image_picker/image_picker.dart';
+
+import 'package:proyecto_final_moviles/config/email_auth.dart';
+import 'package:proyecto_final_moviles/models/user_model.dart';
+import 'package:proyecto_final_moviles/services/storage_service.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
-final storageServiceProvider = Provider<StorageService>((ref) => StorageService());
+final storageServiceProvider = Provider<StorageService>(
+  (ref) => StorageService(),
+);
 
 final isLoggingOutProvider = StateProvider<bool>((ref) => false);
 
@@ -17,41 +20,83 @@ final firebaseAuthStateProvider = StreamProvider<User?>((ref) {
   return ref.watch(authServiceProvider).authStateChanges;
 });
 
-final currentUserDataProvider = StreamProvider<UserModel?>((ref) {
-  final authUser = ref.watch(firebaseAuthStateProvider).value;
-  if (authUser == null) return Stream.value(null);
+// ============================================================
+// DATOS DEL USUARIO ACTUAL
+// ============================================================
 
-  return FirebaseDatabase.instance
-      .ref('users/${authUser.uid}')
-      .onValue
-      .map((event) {
-    if (!event.snapshot.exists || event.snapshot.value == null) return null;
+final currentUserDataProvider = StreamProvider<UserModel?>((ref) {
+  final authState = ref.watch(firebaseAuthStateProvider);
+  final authUser = authState.asData?.value;
+
+  if (authUser == null) {
+    return Stream.value(null);
+  }
+
+  return FirebaseDatabase.instance.ref('users/${authUser.uid}').onValue.map((
+    event,
+  ) {
+    if (!event.snapshot.exists || event.snapshot.value == null) {
+      return null;
+    }
+
     final raw = event.snapshot.value;
-    if (raw is! Map) return null;
+
+    if (raw is! Map) {
+      return null;
+    }
+
     return UserModel.fromMap(authUser.uid, raw);
   });
 });
 
-final allUsersProvider = StreamProvider<List<UserModel>>((ref) {
-  final authUser = ref.watch(firebaseAuthStateProvider).value;
-  if (authUser == null) return Stream.value([]);
+// ============================================================
+// LISTA DE USUARIOS (SOLO ADMINISTRADORES)
+// ============================================================
 
-  return FirebaseDatabase.instance.ref('users').onValue.map((event) {
-    if (!event.snapshot.exists || event.snapshot.value == null) return [];
+final allUsersProvider = StreamProvider<List<UserModel>>((ref) async* {
+  final authState = ref.watch(firebaseAuthStateProvider);
+  final authUser = authState.asData?.value;
+
+  if (authUser == null) {
+    yield [];
+    return;
+  }
+
+  final database = FirebaseDatabase.instance;
+
+  final adminSnapshot = await database.ref('users/${authUser.uid}/role').get();
+
+  if (!adminSnapshot.exists || adminSnapshot.value != 'admin') {
+    yield [];
+    return;
+  }
+
+  yield* database.ref('users').onValue.map((event) {
+    if (!event.snapshot.exists || event.snapshot.value == null) {
+      return <UserModel>[];
+    }
+
     final raw = event.snapshot.value;
-    if (raw is! Map) return [];
+
+    if (raw is! Map) {
+      return <UserModel>[];
+    }
 
     return raw.entries
-        .where((e) => e.value is Map)
+        .where((entry) => entry.value is Map)
         .map(
-          (e) => UserModel.fromMap(
-            e.key.toString(),
-            e.value as Map<dynamic, dynamic>,
+          (entry) => UserModel.fromMap(
+            entry.key.toString(),
+            entry.value as Map<dynamic, dynamic>,
           ),
         )
         .toList();
   });
 });
+
+// ============================================================
+// ESTADO DE LA INTERFAZ DE LOGIN
+// ============================================================
 
 class LoginUiState {
   final bool isLoading;
@@ -80,16 +125,26 @@ class LoginUiState {
 class LoginUiNotifier extends StateNotifier<LoginUiState> {
   LoginUiNotifier() : super(LoginUiState());
 
-  void setLoading(bool value) => state = state.copyWith(isLoading: value);
-  void toggleRegisterMode() =>
-      state = state.copyWith(isRegisterMode: !state.isRegisterMode);
-  void toggleObscurePassword() =>
-      state = state.copyWith(obscurePassword: !state.obscurePassword);
+  void setLoading(bool value) {
+    state = state.copyWith(isLoading: value);
+  }
+
+  void toggleRegisterMode() {
+    state = state.copyWith(isRegisterMode: !state.isRegisterMode);
+  }
+
+  void toggleObscurePassword() {
+    state = state.copyWith(obscurePassword: !state.obscurePassword);
+  }
 }
 
 final loginUiProvider = StateNotifierProvider<LoginUiNotifier, LoginUiState>(
   (ref) => LoginUiNotifier(),
 );
+
+// ============================================================
+// SUBIDA DE FOTO DE PERFIL MEDIANTE EXPRESS
+// ============================================================
 
 class PerfilUploadNotifier extends StateNotifier<AsyncValue<String?>> {
   PerfilUploadNotifier(this._ref) : super(const AsyncData(null));
@@ -98,23 +153,32 @@ class PerfilUploadNotifier extends StateNotifier<AsyncValue<String?>> {
 
   Future<void> actualizarFotoPerfil({
     required String uid,
-    File? archivoMovil,
-    Uint8List? bytesWeb,
+    required XFile imagen,
   }) async {
     state = const AsyncLoading();
+
     try {
-      final url = await _ref.read(storageServiceProvider).subirImagen(
-            carpeta: 'perfiles',
-            nombreArchivo: uid,
-            archivoMovil: archivoMovil,
-            bytesWeb: bytesWeb,
-          );
+      final usuarioActual = FirebaseAuth.instance.currentUser;
+
+      if (usuarioActual == null) {
+        throw Exception('No hay una sesión activa.');
+      }
+
+      if (usuarioActual.uid != uid) {
+        throw Exception('No puedes modificar la fotografía de otro usuario.');
+      }
+
+      final ruta = await _ref
+          .read(storageServiceProvider)
+          .subirImagen(imagen: imagen);
 
       await FirebaseDatabase.instance.ref('users/$uid').update({
-        'foto_url': url,
+        'foto_url': ruta,
       });
 
-      state = AsyncData(url);
+      _ref.invalidate(currentUserDataProvider);
+
+      state = AsyncData(ruta);
     } catch (e, st) {
       state = AsyncError(e, st);
     }
@@ -122,6 +186,6 @@ class PerfilUploadNotifier extends StateNotifier<AsyncValue<String?>> {
 }
 
 final perfilUploadProvider =
-    StateNotifierProvider<PerfilUploadNotifier, AsyncValue<String?>>((ref) {
-  return PerfilUploadNotifier(ref);
-});
+    StateNotifierProvider<PerfilUploadNotifier, AsyncValue<String?>>(
+      (ref) => PerfilUploadNotifier(ref),
+    );

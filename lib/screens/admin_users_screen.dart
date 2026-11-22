@@ -1,14 +1,23 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/user_model.dart';
-import '../providers/auth_provider.dart';
+
+import 'package:proyecto_final_moviles/models/user_model.dart';
+import 'package:proyecto_final_moviles/providers/auth_provider.dart';
+import 'package:proyecto_final_moviles/components/app_end_drawer.dart';
 
 class AdminUsersScreen extends ConsumerWidget {
-  const AdminUsersScreen({super.key});
+  final UserModel userData;
+  final Future<void> Function() onLogout;
+
+  const AdminUsersScreen({
+    super.key,
+    required this.userData,
+    required this.onLogout,
+  });
 
   void _abrirFormularioUsuario(
-    BuildContext context,
-    WidgetRef ref, {
+    BuildContext context, {
     UserModel? usuarioEditar,
   }) {
     showDialog(
@@ -17,6 +26,53 @@ class AdminUsersScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _eliminarUsuario(
+    BuildContext context,
+    WidgetRef ref,
+    UserModel usuario,
+  ) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar usuario'),
+        content: Text('¿Deseas eliminar el registro de ${usuario.email}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true || !context.mounted) return;
+
+    try {
+      await ref.read(authServiceProvider).adminEliminarUsuario(usuario.uid);
+
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Usuario eliminado')));
+    } catch (e) {
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo eliminar: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final usersAsync = ref.watch(allUsersProvider);
@@ -24,98 +80,228 @@ class AdminUsersScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gestión de Usuarios (CRUD)'),
+        title: const Text('Usuarios'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Cerrar sesión',
-            onPressed: () => authService.cerrarSesion(),
+          Builder(
+            builder: (context) => IconButton(
+              tooltip: 'Opciones de cuenta',
+              icon: const Icon(Icons.menu),
+              onPressed: () async{
+                debugPrint("**************************************************************************************");
+                final token = await FirebaseAuth.instance.currentUser!.getIdToken(true);
+               debugPrint('TOKEN ADMIN: $token');
+                Scaffold.of(context).openEndDrawer();
+              },
+            ),
           ),
         ],
       ),
+
+      endDrawer: AppEndDrawer(userData: userData, onLogout: onLogout),
+
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _abrirFormularioUsuario(context, ref),
-        icon: const Icon(Icons.person_add),
-        label: const Text('Nuevo Usuario'),
+        onPressed: () => _abrirFormularioUsuario(context),
+        icon: const Icon(Icons.person_add_alt_1),
+        label: const Text('Nuevo usuario'),
       ),
+
       body: usersAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Error al cargar usuarios: $err')),
+
+        error: (err, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'No se pudieron cargar los usuarios.\n$err',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+
         data: (usuarios) {
           if (usuarios.isEmpty) {
-            return const Center(child: Text('No hay usuarios registrados.'));
+            return const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.people_outline, size: 56, color: Colors.grey),
+                  SizedBox(height: 12),
+                  Text('No hay usuarios registrados'),
+                ],
+              ),
+            );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.only(bottom: 88, top: 8, left: 12, right: 12),
-            itemCount: usuarios.length,
-            itemBuilder: (context, index) {
-              final u = usuarios[index];
-              final esAdmin = u.role == 'admin';
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            children: [
+              Text(
+                'Administración',
+                style: Theme.of(context).textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${usuarios.length} usuarios registrados',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
 
-              return Card(
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: esAdmin ? Colors.indigo : Colors.teal,
-                    child: Icon(
-                      esAdmin ? Icons.admin_panel_settings : Icons.person,
-                      color: Colors.white,
+              ...usuarios.map((usuario) {
+                final esAdmin = usuario.role == 'admin';
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  elevation: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
                     ),
-                  ),
-                  title: Text(u.nombre.isEmpty ? 'Sin nombre' : u.nombre),
-                  subtitle: Text(
-                    '${u.email}\nRol: ${u.role.toUpperCase()} • Acceso: ${u.autorizado ? "Activo" : "Pendiente"}',
-                  ),
-                  isThreeLine: true,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Switch(
-                        value: u.autorizado,
-                        onChanged: (val) => authService.adminActualizarUsuario(
-                          uid: u.uid,
-                          nombre: u.nombre,
-                          role: u.role,
-                          autorizado: val,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () =>
-                            _abrirFormularioUsuario(context, ref, usuarioEditar: u),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () async {
-                          final confirmar = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Eliminar usuario'),
-                              content: Text(
-                                '¿Seguro que deseas eliminar el registro de ${u.email}?',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx, false),
-                                  child: const Text('No'),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            radius: 23,
+                            backgroundColor: esAdmin
+                                ? Colors.indigo.withValues(alpha: 0.12)
+                                : Colors.teal.withValues(alpha: 0.12),
+                            child: Icon(
+                              esAdmin
+                                  ? Icons.admin_panel_settings
+                                  : Icons.person,
+                              color: esAdmin ? Colors.indigo : Colors.teal,
+                            ),
+                          ),
+                          title: Text(
+                            usuario.nombre.isEmpty
+                                ? 'Sin nombre'
+                                : usuario.nombre,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  usuario.email,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                FilledButton(
-                                  onPressed: () => Navigator.pop(ctx, true),
-                                  child: const Text('Sí, eliminar'),
+                                const SizedBox(height: 6),
+                                Chip(
+                                  label: Text(
+                                    esAdmin ? 'Administrador' : 'Usuario',
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
                                 ),
                               ],
                             ),
-                          );
-                          if (confirmar == true) {
-                            await authService.adminEliminarUsuario(u.uid);
-                          }
-                        },
-                      ),
-                    ],
+                          ),
+                          trailing: PopupMenuButton<String>(
+                            tooltip: 'Opciones',
+                            onSelected: (accion) {
+                              if (accion == 'editar') {
+                                _abrirFormularioUsuario(
+                                  context,
+                                  usuarioEditar: usuario,
+                                );
+                              } else if (accion == 'eliminar') {
+                                _eliminarUsuario(context, ref, usuario);
+                              }
+                            },
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(
+                                value: 'editar',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.edit_outlined),
+                                    SizedBox(width: 10),
+                                    Text('Editar'),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'eliminar',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.red,
+                                    ),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      'Eliminar',
+                                      style: TextStyle(color: Colors.red),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const Divider(height: 20),
+
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Permiso de encendido',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Autorizar el control de los aires',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: usuario.autorizado,
+                              onChanged: (valor) async {
+                                try {
+                                  await authService.adminActualizarUsuario(
+                                    uid: usuario.uid,
+                                    nombre: usuario.nombre,
+                                    role: usuario.role,
+                                    autorizado: valor,
+                                  );
+                                } catch (e) {
+                                  if (!context.mounted) return;
+
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'No se pudo actualizar: $e',
+                                      ),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              }),
+            ],
           );
         },
       ),
@@ -125,6 +311,7 @@ class AdminUsersScreen extends ConsumerWidget {
 
 class _FormularioUsuarioDialog extends ConsumerStatefulWidget {
   final UserModel? usuarioEditar;
+
   const _FormularioUsuarioDialog({this.usuarioEditar});
 
   @override
@@ -137,8 +324,10 @@ class _FormularioUsuarioDialogState
   late final TextEditingController _nombreCtrl;
   late final TextEditingController _emailCtrl;
   late final TextEditingController _passCtrl;
+
   late String _rolSeleccionado;
   late bool _autorizado;
+
   bool _guardando = false;
 
   bool get _esEdicion => widget.usuarioEditar != null;
@@ -146,9 +335,13 @@ class _FormularioUsuarioDialogState
   @override
   void initState() {
     super.initState();
-    _nombreCtrl = TextEditingController(text: widget.usuarioEditar?.nombre ?? '');
+
+    _nombreCtrl = TextEditingController(
+      text: widget.usuarioEditar?.nombre ?? '',
+    );
     _emailCtrl = TextEditingController(text: widget.usuarioEditar?.email ?? '');
     _passCtrl = TextEditingController();
+
     _rolSeleccionado = widget.usuarioEditar?.role ?? 'user';
     _autorizado = widget.usuarioEditar?.autorizado ?? true;
   }
@@ -161,58 +354,133 @@ class _FormularioUsuarioDialogState
     super.dispose();
   }
 
+  Future<void> _guardarUsuario() async {
+    if (_guardando) return;
+
+    setState(() => _guardando = true);
+
+    try {
+      final authService = ref.read(authServiceProvider);
+
+      if (_esEdicion) {
+        await authService.adminActualizarUsuario(
+          uid: widget.usuarioEditar!.uid,
+          nombre: _nombreCtrl.text.trim(),
+          role: _rolSeleccionado,
+          autorizado: _autorizado,
+        );
+      } else {
+        await authService.adminCrearUsuario(
+          nombre: _nombreCtrl.text.trim(),
+          email: _emailCtrl.text.trim(),
+          password: _passCtrl.text,
+          role: _rolSeleccionado,
+          autorizado: _autorizado,
+        );
+      }
+
+      if (!mounted) return;
+
+      Navigator.pop(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_esEdicion ? 'Usuario actualizado' : 'Usuario creado'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _guardando = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(_esEdicion ? 'Editar Usuario' : 'Dar de Alta Usuario'),
+      title: Text(_esEdicion ? 'Editar usuario' : 'Nuevo usuario'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _nombreCtrl,
-              decoration: const InputDecoration(labelText: 'Nombre completo'),
+              enabled: !_guardando,
+              decoration: const InputDecoration(
+                labelText: 'Nombre completo',
+                prefixIcon: Icon(Icons.person_outline),
+                border: OutlineInputBorder(),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
+
             if (!_esEdicion) ...[
               TextField(
                 controller: _emailCtrl,
+                enabled: !_guardando,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Correo electrónico'),
+                decoration: const InputDecoration(
+                  labelText: 'Correo electrónico',
+                  prefixIcon: Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(),
+                ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               TextField(
                 controller: _passCtrl,
+                enabled: !_guardando,
                 obscureText: true,
                 decoration: const InputDecoration(
-                  labelText: 'Contraseña inicial (mín. 6)',
+                  labelText: 'Contraseña inicial',
+                  helperText: 'Mínimo 6 caracteres',
+                  prefixIcon: Icon(Icons.lock_outline),
+                  border: OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
             ],
+
             DropdownButtonFormField<String>(
-              value: _rolSeleccionado,
-              decoration: const InputDecoration(labelText: 'Rol en el sistema'),
+              initialValue: _rolSeleccionado,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Rol en el sistema',
+                prefixIcon: Icon(Icons.admin_panel_settings_outlined),
+                border: OutlineInputBorder(),
+              ),
               items: const [
-                DropdownMenuItem(
-                  value: 'user',
-                  child: Text('Usuario Normal (Laboratorio)'),
-                ),
-                DropdownMenuItem(
-                  value: 'admin',
-                  child: Text('Administrador'),
-                ),
+                DropdownMenuItem(value: 'user', child: Text('Usuario normal')),
+                DropdownMenuItem(value: 'admin', child: Text('Administrador')),
               ],
-              onChanged: (val) {
-                if (val != null) setState(() => _rolSeleccionado = val);
-              },
+              onChanged: _guardando
+                  ? null
+                  : (valor) {
+                      if (valor != null) {
+                        setState(() {
+                          _rolSeleccionado = valor;
+                        });
+                      }
+                    },
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
+
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Autorizado para encender aires'),
               value: _autorizado,
-              onChanged: (val) => setState(() => _autorizado = val),
+              onChanged: _guardando
+                  ? null
+                  : (valor) {
+                      setState(() {
+                        _autorizado = valor;
+                      });
+                    },
             ),
           ],
         ),
@@ -223,63 +491,17 @@ class _FormularioUsuarioDialogState
           child: const Text('Cancelar'),
         ),
         FilledButton(
-          onPressed: _guardando
-              ? null
-              : () async {
-                  setState(() => _guardando = true);
-                  final authService = ref.read(authServiceProvider);
-                  try {
-                    if (_esEdicion) {
-                      await authService.adminActualizarUsuario(
-                        uid: widget.usuarioEditar!.uid,
-                        nombre: _nombreCtrl.text,
-                        role: _rolSeleccionado,
-                        autorizado: _autorizado,
-                      );
-                    } else {
-                      await authService.adminCrearUsuario(
-                        nombre: _nombreCtrl.text,
-                        email: _emailCtrl.text,
-                        password: _passCtrl.text,
-                        role: _rolSeleccionado,
-                        autorizado: _autorizado,
-                      );
-                    }
-                    if (context.mounted) Navigator.pop(context);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            _esEdicion
-                                ? 'Usuario actualizado'
-                                : 'Usuario dado de alta',
-                          ),
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  } finally {
-                    if (mounted) setState(() => _guardando = false);
-                  }
-                },
+          onPressed: _guardando ? null : _guardarUsuario,
           child: _guardando
               ? const SizedBox(
-                  height: 18,
                   width: 18,
+                  height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
                     color: Colors.white,
                   ),
                 )
-              : Text(_esEdicion ? 'Guardar cambios' : 'Crear usuario'),
+              : Text(_esEdicion ? 'Guardar' : 'Crear usuario'),
         ),
       ],
     );

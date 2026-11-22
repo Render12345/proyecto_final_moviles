@@ -4,7 +4,7 @@ class UserModel {
   final String email;
   final String fotoUrl;
   final String provider;
-  final String role; // 'admin' o 'user'
+  final String role;
   final bool autorizado;
   final String planSuscripcion;
   final Map<String, bool> dispositivosVinculados;
@@ -22,17 +22,28 @@ class UserModel {
   });
 
   factory UserModel.fromMap(String uid, Map<dynamic, dynamic> map) {
-    final rawVinculados =
-        map['dispositivos_vinculados'] as Map<dynamic, dynamic>? ?? {};
-    final vinculados = rawVinculados.map(
+    // Nuevo formato: información editable dentro de profile.
+    final rawProfile = map['profile'];
+    final profile = rawProfile is Map ? rawProfile : <dynamic, dynamic>{};
+
+    // Compatibilidad temporal con los registros anteriores.
+    final nombre = profile['nombre'] ?? map['nombre'];
+    final fotoUrl = profile['foto_url'] ?? map['foto_url'];
+
+    final rawVinculados = map['dispositivos_vinculados'];
+    final vinculadosMap = rawVinculados is Map
+        ? rawVinculados
+        : <dynamic, dynamic>{};
+
+    final vinculados = vinculadosMap.map(
       (key, value) => MapEntry(key.toString(), value == true),
     );
 
     return UserModel(
       uid: uid,
-      nombre: map['nombre']?.toString() ?? '',
+      nombre: nombre?.toString() ?? '',
       email: map['email']?.toString() ?? '',
-      fotoUrl: map['foto_url']?.toString() ?? '',
+      fotoUrl: fotoUrl?.toString() ?? '',
       provider: map['provider']?.toString() ?? 'password',
       role: map['role']?.toString() ?? 'user',
       autorizado: map['autorizado'] == true,
@@ -43,9 +54,11 @@ class UserModel {
 
   Map<String, dynamic> toMap() {
     return {
-      'nombre': nombre,
+      'profile': {
+        'nombre': nombre,
+        'foto_url': fotoUrl,
+      },
       'email': email,
-      'foto_url': fotoUrl,
       'provider': provider,
       'role': role,
       'autorizado': autorizado,
