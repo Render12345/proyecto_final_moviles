@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -35,8 +34,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
-        backgroundColor:
-            esError ? Colors.red.shade700 : Colors.green.shade700,
+        backgroundColor: esError ? Colors.red.shade700 : Colors.green.shade700,
       ),
     );
   }
@@ -59,14 +57,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           password: _passCtrl.text,
         );
 
-        _mostrarMensaje(
-          'Cuenta creada. Revisa tu correo para verificarla.',
-        );
+        _mostrarMensaje('Cuenta creada. Revisa tu correo para verificarla.');
       } else {
-        await authService.loginConCorreo(
-          _emailCtrl.text,
-          _passCtrl.text,
-        );
+        await authService.loginConCorreo(_emailCtrl.text, _passCtrl.text);
       }
     } catch (e) {
       _mostrarMensaje('Error: $e', esError: true);
@@ -122,127 +115,117 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<String?> _mostrarOpcionesCuentaExistente() {
-  return showDialog<String>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Esta cuenta ya existe'),
-      content: const Text(
-        'El correo de GitHub ya está registrado en Control Aires ITC. '
-        'Inicia sesión con el método que utilizaste originalmente '
-        'para asociar GitHub a tu cuenta.',
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Esta cuenta ya existe'),
+        content: const Text(
+          'El correo de GitHub ya está registrado en Control Aires ITC. '
+          'Inicia sesión con el método que utilizaste originalmente '
+          'para asociar GitHub a tu cuenta.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancelar'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.pop(ctx, 'password'),
+            icon: const Icon(Icons.email_outlined),
+            label: const Text('Correo'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, 'google'),
+            icon: const Icon(Icons.g_mobiledata),
+            label: const Text('Google'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, null),
-          child: const Text('Cancelar'),
-        ),
-        OutlinedButton.icon(
-          onPressed: () => Navigator.pop(ctx, 'password'),
-          icon: const Icon(Icons.email_outlined),
-          label: const Text('Correo'),
-        ),
-        FilledButton.icon(
-          onPressed: () => Navigator.pop(ctx, 'google'),
-          icon: const Icon(Icons.g_mobiledata),
-          label: const Text('Google'),
-        ),
-      ],
-    ),
-  );
-}
+    );
+  }
 
-Future<Map<String, String>?> _mostrarDialogoCredenciales(
-  String correoPendiente,
-) {
-  return showDialog<Map<String, String>>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => _DialogoCredenciales(
-      correoPendiente: correoPendiente,
-    ),
-  );
-}
+  Future<Map<String, String>?> _mostrarDialogoCredenciales(
+    String correoPendiente,
+  ) {
+    return showDialog<Map<String, String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DialogoCredenciales(correoPendiente: correoPendiente),
+    );
+  }
 
   // CONTINUAR CON GITHUB
   Future<void> _iniciarConGitHub() async {
-  final uiNotifier = ref.read(loginUiProvider.notifier);
-  final authService = ref.read(authServiceProvider);
+    final uiNotifier = ref.read(loginUiProvider.notifier);
+    final authService = ref.read(authServiceProvider);
 
-  uiNotifier.setLoading(true);
+    uiNotifier.setLoading(true);
 
-  try {
     try {
-      await authService.loginConGitHub();
-    } catch (e) {
-      if (!authService.hayCredencialGitHubPendiente) {
-        _mostrarMensaje(
-          'Error GitHub: $e',
-          esError: true,
-        );
-        return;
-      }
-
-      final correoPendiente = authService.correoGitHubPendiente;
-
-      if (correoPendiente == null || correoPendiente.isEmpty) {
-        _mostrarMensaje(
-          'No se pudo identificar el correo de GitHub.',
-          esError: true,
-        );
-        return;
-      }
-
-      if (!mounted) return;
-
-      final metodo = await _mostrarOpcionesCuentaExistente();
-
-      if (!mounted || metodo == null) return;
-
       try {
-        if (metodo == 'google') {
-          await authService.loginConGoogleParaVincular(
-            correoPendiente,
-          );
-        } else if (metodo == 'password') {
-          final credenciales = await _mostrarDialogoCredenciales(
-            correoPendiente,
-          );
-
-          if (!mounted || credenciales == null) return;
-
-          await authService.loginConCorreo(
-            credenciales['email']!,
-            credenciales['password']!,
-          );
+        await authService.loginConGitHub();
+      } catch (e) {
+        if (!authService.hayCredencialGitHubPendiente) {
+          _mostrarMensaje('Error GitHub: $e', esError: true);
+          return;
         }
 
-        // Vincular GitHub a la cuenta original autenticada.
-        final resultado =
-            await authService.completarVinculacionGitHub();
+        final correoPendiente = authService.correoGitHubPendiente;
 
-        if (!mounted) return;
-
-        if (resultado?.user != null) {
+        if (correoPendiente == null || correoPendiente.isEmpty) {
           _mostrarMensaje(
-            '¡GitHub se vinculó correctamente!',
+            'No se pudo identificar el correo de GitHub.',
+            esError: true,
           );
+          return;
         }
-      } catch (error) {
+
         if (!mounted) return;
 
-        _mostrarMensaje(
-          'No se pudo completar la vinculación: $error',
-          esError: true,
-        );
+        final metodo = await _mostrarOpcionesCuentaExistente();
+
+        if (!mounted || metodo == null) return;
+
+        try {
+          if (metodo == 'google') {
+            await authService.loginConGoogleParaVincular(correoPendiente);
+          } else if (metodo == 'password') {
+            final credenciales = await _mostrarDialogoCredenciales(
+              correoPendiente,
+            );
+
+            if (!mounted || credenciales == null) return;
+
+            await authService.loginConCorreo(
+              credenciales['email']!,
+              credenciales['password']!,
+            );
+          }
+
+          // Vincular GitHub a la cuenta original autenticada.
+          final resultado = await authService.completarVinculacionGitHub();
+
+          if (!mounted) return;
+
+          if (resultado?.user != null) {
+            _mostrarMensaje('¡GitHub se vinculó correctamente!');
+          }
+        } catch (error) {
+          if (!mounted) return;
+
+          _mostrarMensaje(
+            'No se pudo completar la vinculación: $error',
+            esError: true,
+          );
+        }
       }
-    }
-  } finally {
-    if (mounted) {
-      uiNotifier.setLoading(false);
+    } finally {
+      if (mounted) {
+        uiNotifier.setLoading(false);
+      }
     }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -278,9 +261,7 @@ Future<Map<String, String>?> _mostrarDialogoCredenciales(
                         ? 'Crear Cuenta'
                         : 'Control Aires ITC',
                     textAlign: TextAlign.center,
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineMedium
+                    style: Theme.of(context).textTheme.headlineMedium
                         ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 24),
@@ -293,10 +274,9 @@ Future<Map<String, String>?> _mostrarDialogoCredenciales(
                         prefixIcon: Icon(Icons.person_outline),
                         border: OutlineInputBorder(),
                       ),
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty)
-                              ? 'Ingresa tu nombre'
-                              : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Ingresa tu nombre'
+                          : null,
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -309,10 +289,9 @@ Future<Map<String, String>?> _mostrarDialogoCredenciales(
                       prefixIcon: Icon(Icons.email_outlined),
                       border: OutlineInputBorder(),
                     ),
-                    validator: (v) =>
-                        (v == null || !v.contains('@'))
-                            ? 'Correo inválido'
-                            : null,
+                    validator: (v) => (v == null || !v.contains('@'))
+                        ? 'Correo inválido'
+                        : null,
                   ),
                   const SizedBox(height: 16),
 
@@ -332,10 +311,9 @@ Future<Map<String, String>?> _mostrarDialogoCredenciales(
                         onPressed: uiNotifier.toggleObscurePassword,
                       ),
                     ),
-                    validator: (v) =>
-                        (v == null || v.length < 6)
-                            ? 'Mínimo 6 caracteres'
-                            : null,
+                    validator: (v) => (v == null || v.length < 6)
+                        ? 'Mínimo 6 caracteres'
+                        : null,
                   ),
 
                   if (!uiState.isRegisterMode)
@@ -350,8 +328,7 @@ Future<Map<String, String>?> _mostrarDialogoCredenciales(
                   const SizedBox(height: 12),
 
                   FilledButton(
-                    onPressed:
-                        uiState.isLoading ? null : _submitCorreo,
+                    onPressed: uiState.isLoading ? null : _submitCorreo,
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
@@ -394,28 +371,27 @@ Future<Map<String, String>?> _mostrarDialogoCredenciales(
                             try {
                               await authService.loginConGoogle();
                             } catch (e) {
-                              _mostrarMensaje(
-                                'Error Google: $e',
-                                esError: true,
-                              );
+                              if (mounted) {
+                                _mostrarMensaje(
+                                  'Error Google: $e',
+                                  esError: true,
+                                );
+                              }
                             } finally {
                               if (mounted) {
                                 uiNotifier.setLoading(false);
                               }
                             }
                           },
-                    icon: const Icon(
-                      Icons.g_mobiledata,
-                      size: 28,
-                    ),
+
+                    icon: const Icon(Icons.g_mobiledata, size: 28),
                     label: const Text('Continuar con Google'),
                   ),
 
                   const SizedBox(height: 12),
 
                   OutlinedButton.icon(
-                    onPressed:
-                        uiState.isLoading ? null : _iniciarConGitHub,
+                    onPressed: uiState.isLoading ? null : _iniciarConGitHub,
                     icon: const Icon(Icons.code),
                     label: const Text('Continuar con GitHub'),
                   ),
@@ -460,10 +436,7 @@ class VerifyEmailScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               const Text(
                 'Confirma tu correo electrónico',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
@@ -477,8 +450,8 @@ class VerifyEmailScreen extends ConsumerWidget {
 
               FilledButton.icon(
                 onPressed: () async {
-                  final verificado =
-                      await authService.verificarSiYaConfirmoCorreo();
+                  final verificado = await authService
+                      .verificarSiYaConfirmoCorreo();
 
                   if (!verificado && context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -506,16 +479,12 @@ class VerifyEmailScreen extends ConsumerWidget {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text(
-                          'Correo de verificación reenviado.',
-                        ),
+                        content: Text('Correo de verificación reenviado.'),
                       ),
                     );
                   }
                 },
-                child: const Text(
-                  'Reenviar correo de confirmación',
-                ),
+                child: const Text('Reenviar correo de confirmación'),
               ),
             ],
           ),
@@ -524,20 +493,17 @@ class VerifyEmailScreen extends ConsumerWidget {
     );
   }
 }
+
 class _DialogoCredenciales extends StatefulWidget {
   final String correoPendiente;
 
-  const _DialogoCredenciales({
-    required this.correoPendiente,
-  });
+  const _DialogoCredenciales({required this.correoPendiente});
 
   @override
-  State<_DialogoCredenciales> createState() =>
-      _DialogoCredencialesState();
+  State<_DialogoCredenciales> createState() => _DialogoCredencialesState();
 }
 
-class _DialogoCredencialesState
-    extends State<_DialogoCredenciales> {
+class _DialogoCredencialesState extends State<_DialogoCredenciales> {
   late final TextEditingController _emailCtrl;
   final TextEditingController _passCtrl = TextEditingController();
 
@@ -545,9 +511,7 @@ class _DialogoCredencialesState
   void initState() {
     super.initState();
 
-    _emailCtrl = TextEditingController(
-      text: widget.correoPendiente,
-    );
+    _emailCtrl = TextEditingController(text: widget.correoPendiente);
   }
 
   @override
@@ -561,13 +525,10 @@ class _DialogoCredencialesState
     final email = _emailCtrl.text.trim();
     final password = _passCtrl.text;
 
-    if (email.toLowerCase() !=
-        widget.correoPendiente.toLowerCase()) {
+    if (email.toLowerCase() != widget.correoPendiente.toLowerCase()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'El correo no coincide con el de GitHub.',
-          ),
+          content: Text('El correo no coincide con el de GitHub.'),
         ),
       );
       return;
@@ -575,17 +536,12 @@ class _DialogoCredencialesState
 
     if (password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ingresa tu contraseña original.'),
-        ),
+        const SnackBar(content: Text('Ingresa tu contraseña original.')),
       );
       return;
     }
 
-    Navigator.pop(context, {
-      'email': email,
-      'password': password,
-    });
+    Navigator.pop(context, {'email': email, 'password': password});
   }
 
   @override
@@ -622,10 +578,7 @@ class _DialogoCredencialesState
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancelar'),
         ),
-        FilledButton(
-          onPressed: _continuar,
-          child: const Text('Continuar'),
-        ),
+        FilledButton(onPressed: _continuar, child: const Text('Continuar')),
       ],
     );
   }

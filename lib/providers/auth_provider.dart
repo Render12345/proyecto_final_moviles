@@ -52,45 +52,49 @@ final currentUserDataProvider = StreamProvider<UserModel?>((ref) {
 // ============================================================
 // LISTA DE USUARIOS (SOLO ADMINISTRADORES)
 // ============================================================
-
-final allUsersProvider = StreamProvider<List<UserModel>>((ref) async* {
+final allUsersProvider = StreamProvider<List<UserModel>>((ref) {
   final authState = ref.watch(firebaseAuthStateProvider);
   final authUser = authState.asData?.value;
 
   if (authUser == null) {
-    yield [];
-    return;
+    return Stream.value([]);
   }
 
   final database = FirebaseDatabase.instance;
 
-  final adminSnapshot = await database.ref('users/${authUser.uid}/role').get();
-
-  if (!adminSnapshot.exists || adminSnapshot.value != 'admin') {
-    yield [];
-    return;
-  }
-
-  yield* database.ref('users').onValue.map((event) {
-    if (!event.snapshot.exists || event.snapshot.value == null) {
-      return <UserModel>[];
+  return database.ref('users/${authUser.uid}/role').onValue.asyncExpand((
+    adminEvent,
+  ) {
+    // Comprobar que la sesión siga perteneciendo al mismo usuario.
+    if (FirebaseAuth.instance.currentUser?.uid != authUser.uid) {
+      return Stream.value(<UserModel>[]);
     }
 
-    final raw = event.snapshot.value;
-
-    if (raw is! Map) {
-      return <UserModel>[];
+    if (adminEvent.snapshot.value != 'admin') {
+      return Stream.value(<UserModel>[]);
     }
 
-    return raw.entries
-        .where((entry) => entry.value is Map)
-        .map(
-          (entry) => UserModel.fromMap(
-            entry.key.toString(),
-            entry.value as Map<dynamic, dynamic>,
-          ),
-        )
-        .toList();
+    return database.ref('users').onValue.map((event) {
+      if (!event.snapshot.exists || event.snapshot.value == null) {
+        return <UserModel>[];
+      }
+
+      final raw = event.snapshot.value;
+
+      if (raw is! Map) {
+        return <UserModel>[];
+      }
+
+      return raw.entries
+          .where((entry) => entry.value is Map)
+          .map(
+            (entry) => UserModel.fromMap(
+              entry.key.toString(),
+              entry.value as Map<dynamic, dynamic>,
+            ),
+          )
+          .toList();
+    });
   });
 });
 

@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -86,10 +85,7 @@ class AdminUsersScreen extends ConsumerWidget {
             builder: (context) => IconButton(
               tooltip: 'Opciones de cuenta',
               icon: const Icon(Icons.menu),
-              onPressed: () async{
-                debugPrint("**************************************************************************************");
-                final token = await FirebaseAuth.instance.currentUser!.getIdToken(true);
-               debugPrint('TOKEN ADMIN: $token');
+              onPressed: () {
                 Scaffold.of(context).openEndDrawer();
               },
             ),

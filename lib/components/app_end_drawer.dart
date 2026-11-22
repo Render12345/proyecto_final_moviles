@@ -1,8 +1,10 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/user_model.dart';
 import '../screens/edit_account_screen.dart';
+import '../screens/admin_users_screen.dart';
 import '../services/storage_service.dart';
 
 class AppEndDrawer extends ConsumerWidget {
@@ -53,6 +55,8 @@ class AppEndDrawer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final esAdministrador = userData.role == 'admin';
+
     return Drawer(
       child: SafeArea(
         child: Column(
@@ -101,22 +105,40 @@ class AppEndDrawer extends ConsumerWidget {
                   const SizedBox(height: 8),
                   Chip(
                     avatar: Icon(
-                      userData.role == 'admin'
+                      esAdministrador
                           ? Icons.admin_panel_settings
                           : Icons.person,
                       size: 18,
                     ),
                     label: Text(
-                      userData.role == 'admin'
-                          ? 'Administrador'
-                          : 'Usuario',
+                      esAdministrador ? 'Administrador' : 'Usuario',
                     ),
                   ),
                 ],
               ),
             ),
+
+            if (esAdministrador)
+              ListTile(
+                leading: const Icon(Icons.manage_accounts_outlined),
+                title: const Text('Administrar usuarios'),
+                subtitle: const Text('Gestionar cuentas y permisos'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AdminUsersScreen(
+                        userData: userData,
+                        onLogout: onLogout,
+                      ),
+                    ),
+                  );
+                },
+              ),
+
             ListTile(
-              leading: const Icon(Icons.manage_accounts_outlined),
+              leading: const Icon(Icons.account_circle_outlined),
               title: const Text('Editar cuenta'),
               subtitle: const Text('Perfil y métodos de acceso'),
               onTap: () {
@@ -131,6 +153,7 @@ class AppEndDrawer extends ConsumerWidget {
                 );
               },
             ),
+
             const Spacer(),
             const Divider(),
             ListTile(

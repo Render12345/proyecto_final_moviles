@@ -118,36 +118,51 @@ class AuthService {
 
   // 5. INICIO DE SESIÓN CON GOOGLE
   // Compatible con google_sign_in v7+
-  Future<UserCredential?> loginConGoogle() async {
-    try {
-      await _ensureGoogleInitialized();
+  
+Future<UserCredential?> loginConGoogle() async {
+  try {
+    await _ensureGoogleInitialized();
 
-      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
+    final GoogleSignInAccount googleUser =
+        await _googleSignIn.authenticate();
 
-      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+    final GoogleSignInAuthentication googleAuth =
+        googleUser.authentication;
 
-      final AuthCredential credential = GoogleAuthProvider.credential(
-        idToken: googleAuth.idToken,
+    final AuthCredential credential = GoogleAuthProvider.credential(
+      idToken: googleAuth.idToken,
+    );
+
+    final userCred = await _auth.signInWithCredential(credential);
+
+    if (userCred.user != null) {
+      await _guardarUsuarioOAuthSiNoExiste(
+        userCred.user!,
+        'google.com',
       );
-
-      final userCred = await _auth.signInWithCredential(credential);
-
-      if (userCred.user != null) {
-        await _guardarUsuarioOAuthSiNoExiste(userCred.user!, 'google.com');
-      }
-
-      return userCred;
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'account-exists-with-different-credential') {
-        throw Exception(
-          'Este correo ya está registrado con otro método de acceso. '
-          'Inicia sesión con el proveedor que usaste originalmente.',
-        );
-      }
-
-      rethrow;
     }
+
+    return userCred;
+  } on GoogleSignInException catch (e) {
+    // Cancelar el selector de cuentas no es un error.
+    if (e.code == GoogleSignInExceptionCode.canceled) {
+      debugPrint('Inicio de sesión con Google cancelado por el usuario.');
+      return null;
+    }
+
+    rethrow;
+  } on FirebaseAuthException catch (e) {
+    if (e.code == 'account-exists-with-different-credential') {
+      throw Exception(
+        'Este correo ya está registrado con otro método de acceso. '
+        'Inicia sesión con el proveedor que usaste originalmente.',
+      );
+    }
+
+    rethrow;
   }
+}
+
 
   // 6. VINCULAR GITHUB A LA CUENTA ACTUAL
   Future<UserCredential?> vincularGitHub() async {
