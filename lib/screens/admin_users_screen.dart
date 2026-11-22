@@ -339,7 +339,7 @@ class _FormularioUsuarioDialogState
     _passCtrl = TextEditingController();
 
     _rolSeleccionado = widget.usuarioEditar?.role ?? 'user';
-    _autorizado = widget.usuarioEditar?.autorizado ?? true;
+    _autorizado = widget.usuarioEditar?.autorizado ?? false;
   }
 
   @override

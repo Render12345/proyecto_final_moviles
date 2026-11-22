@@ -118,51 +118,45 @@ class AuthService {
 
   // 5. INICIO DE SESIÓN CON GOOGLE
   // Compatible con google_sign_in v7+
-  
-Future<UserCredential?> loginConGoogle() async {
-  try {
-    await _ensureGoogleInitialized();
 
-    final GoogleSignInAccount googleUser =
-        await _googleSignIn.authenticate();
+  Future<UserCredential?> loginConGoogle() async {
+    try {
+      await _ensureGoogleInitialized();
 
-    final GoogleSignInAuthentication googleAuth =
-        googleUser.authentication;
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
 
-    final AuthCredential credential = GoogleAuthProvider.credential(
-      idToken: googleAuth.idToken,
-    );
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
-    final userCred = await _auth.signInWithCredential(credential);
-
-    if (userCred.user != null) {
-      await _guardarUsuarioOAuthSiNoExiste(
-        userCred.user!,
-        'google.com',
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        idToken: googleAuth.idToken,
       );
-    }
 
-    return userCred;
-  } on GoogleSignInException catch (e) {
-    // Cancelar el selector de cuentas no es un error.
-    if (e.code == GoogleSignInExceptionCode.canceled) {
-      debugPrint('Inicio de sesión con Google cancelado por el usuario.');
-      return null;
-    }
+      final userCred = await _auth.signInWithCredential(credential);
 
-    rethrow;
-  } on FirebaseAuthException catch (e) {
-    if (e.code == 'account-exists-with-different-credential') {
-      throw Exception(
-        'Este correo ya está registrado con otro método de acceso. '
-        'Inicia sesión con el proveedor que usaste originalmente.',
-      );
-    }
+      if (userCred.user != null) {
+        await _guardarUsuarioOAuthSiNoExiste(userCred.user!, 'google.com');
+      }
 
-    rethrow;
+      return userCred;
+    } on GoogleSignInException catch (e) {
+      // Cancelar el selector de cuentas no es un error.
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        debugPrint('Inicio de sesión con Google cancelado por el usuario.');
+        return null;
+      }
+
+      rethrow;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'account-exists-with-different-credential') {
+        throw Exception(
+          'Este correo ya está registrado con otro método de acceso. '
+          'Inicia sesión con el proveedor que usaste originalmente.',
+        );
+      }
+
+      rethrow;
+    }
   }
-}
-
 
   // 6. VINCULAR GITHUB A LA CUENTA ACTUAL
   Future<UserCredential?> vincularGitHub() async {
@@ -454,6 +448,11 @@ Future<UserCredential?> loginConGoogle() async {
     User? createdUser;
 
     try {
+      await _validarAdministrador();
+
+      if (role != 'admin' && role != 'user') {
+        throw Exception('El rol seleccionado no es válido.');
+      }
       secondaryApp = await Firebase.initializeApp(
         name: 'SecondaryApp',
         options: DefaultFirebaseOptions.currentPlatform,
@@ -512,6 +511,11 @@ Future<UserCredential?> loginConGoogle() async {
     required String role,
     required bool autorizado,
   }) async {
+    await _validarAdministrador();
+
+    if (role != 'admin' && role != 'user') {
+      throw Exception('El rol seleccionado no es válido.');
+    }
     final usuarioActual = _auth.currentUser;
 
     if (usuarioActual == null) {
@@ -557,7 +561,7 @@ Future<UserCredential?> loginConGoogle() async {
     if (token == null || token.isEmpty) {
       throw Exception('No se pudo obtener el token de autenticación.');
     }
-
+    await _validarAdministrador();
     final response = await http.delete(
       Uri.parse('https://qr-dispositivos.onrender.com/api/admin/users/$uid'),
       headers: {
@@ -612,5 +616,25 @@ Future<UserCredential?> loginConGoogle() async {
     });
 
     await user.reload();
+  }
+
+  // ============================================================
+  // VALIDAR QUE EL USUARIO ACTUAL SEA ADMINISTRADOR
+  // ============================================================
+
+  Future<void> _validarAdministrador() async {
+    final usuarioActual = _auth.currentUser;
+
+    if (usuarioActual == null) {
+      throw Exception('No hay una sesión activa.');
+    }
+
+    final snapshot = await _db.child('users/${usuarioActual.uid}/role').get();
+
+    if (!snapshot.exists || snapshot.value != 'admin') {
+      throw Exception(
+        'No tienes permisos de administrador para realizar esta operación.',
+      );
+    }
   }
 }
