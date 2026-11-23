@@ -5,9 +5,10 @@ import '../models/user_model.dart';
 import '../models/salon_model.dart';
 import '../providers/salon_provider.dart';
 import '../components/app_end_drawer.dart';
-import 'admin_users_screen.dart';
 import 'salon_form_screen.dart';
 import '../services/storage_service.dart';
+import 'devices_screen.dart';
+import '../providers/device_provider.dart';
 
 class SalonesScreen extends ConsumerWidget {
   final UserModel userData;
@@ -30,22 +31,6 @@ class SalonesScreen extends ConsumerWidget {
         title: Text(esAdministrador ? 'Salones (Edición)' : 'Salones'),
         centerTitle: true,
         actions: [
-          if (esAdministrador)
-            IconButton(
-              tooltip: 'Administrar usuarios',
-              icon: const Icon(Icons.manage_accounts_outlined),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AdminUsersScreen(
-                      userData: userData,
-                      onLogout: onLogout,
-                    ),
-                  ),
-                );
-              },
-            ),
           Builder(
             builder: (context) => IconButton(
               tooltip: 'Opciones de cuenta',

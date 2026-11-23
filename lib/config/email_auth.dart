@@ -1,3 +1,4 @@
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -6,6 +7,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../firebase_options.dart';
 import '../models/user_model.dart';
+import '../services/notification_service.dart';
 
 import 'dart:convert';
 
@@ -118,7 +120,6 @@ class AuthService {
 
   // 5. INICIO DE SESIÓN CON GOOGLE
   // Compatible con google_sign_in v7+
-
   Future<UserCredential?> loginConGoogle() async {
     try {
       await _ensureGoogleInitialized();
@@ -139,7 +140,6 @@ class AuthService {
 
       return userCred;
     } on GoogleSignInException catch (e) {
-      // Cancelar el selector de cuentas no es un error.
       if (e.code == GoogleSignInExceptionCode.canceled) {
         debugPrint('Inicio de sesión con Google cancelado por el usuario.');
         return null;
@@ -266,11 +266,11 @@ class AuthService {
     return await user.linkWithCredential(credential);
   }
 
+  // INICIO DE SESIÓN CON GITHUB
   Future<UserCredential?> loginConGitHub() async {
     _githubCredentialPendiente = null;
     _githubEmailPendiente = null;
 
-    // Usuario que ya tiene sesión antes de intentar GitHub.
     final usuarioAnterior = _auth.currentUser;
 
     debugPrint('========== INICIO GITHUB ==========');
@@ -312,7 +312,6 @@ class AuthService {
         '${e.credential?.providerId ?? "No disponible"}',
       );
 
-      // Guardar la información para completar la vinculación.
       if (e.code == 'account-exists-with-different-credential') {
         _githubCredentialPendiente = e.credential;
         _githubEmailPendiente = e.email;
@@ -345,6 +344,7 @@ class AuthService {
     try {
       final emailPendiente = _githubEmailPendiente?.toLowerCase();
       final emailActual = userActual.email?.toLowerCase();
+
       debugPrint('========== VALIDACIÓN DE VINCULACIÓN ==========');
       debugPrint('UID actual: ${userActual.uid}');
       debugPrint('Correo actual: ${userActual.email}');
@@ -382,10 +382,8 @@ class AuthService {
     try {
       await _ensureGoogleInitialized();
 
-      // Seleccionar una cuenta de Google.
       final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
 
-      // Comprobar que sea el correo esperado.
       if (googleUser.email.toLowerCase() != correoEsperado.toLowerCase()) {
         throw Exception(
           'Seleccionaste una cuenta de Google diferente '
@@ -403,7 +401,6 @@ class AuthService {
 
       final credential = GoogleAuthProvider.credential(idToken: idToken);
 
-      // Autenticar la cuenta existente en Firebase.
       return await _auth.signInWithCredential(credential);
     } on FirebaseAuthException catch (e) {
       debugPrint('Error Google para vinculación: ${e.code}');
@@ -453,6 +450,7 @@ class AuthService {
       if (role != 'admin' && role != 'user') {
         throw Exception('El rol seleccionado no es válido.');
       }
+
       secondaryApp = await Firebase.initializeApp(
         name: 'SecondaryApp',
         options: DefaultFirebaseOptions.currentPlatform,
@@ -488,7 +486,6 @@ class AuthService {
 
       await _db.child('users/${createdUser.uid}').set(nuevoUsuario.toMap());
     } catch (e) {
-      // Si algo falla después de crear la cuenta, intentamos eliminarla.
       if (createdUser != null) {
         try {
           await createdUser.delete();
@@ -516,6 +513,7 @@ class AuthService {
     if (role != 'admin' && role != 'user') {
       throw Exception('El rol seleccionado no es válido.');
     }
+
     final usuarioActual = _auth.currentUser;
 
     if (usuarioActual == null) {
@@ -528,10 +526,10 @@ class AuthService {
       throw Exception('El nombre no puede estar vacío.');
     }
 
-    // Un administrador puede editar su nombre,
-    // pero no modificar sus propios permisos.
     if (usuarioActual.uid == uid) {
-      await _db.child('users/$uid/profile').update({'nombre': nombreLimpio});
+      await _db.child('users/$uid/profile').update({
+        'nombre': nombreLimpio,
+      });
 
       return;
     }
@@ -561,7 +559,9 @@ class AuthService {
     if (token == null || token.isEmpty) {
       throw Exception('No se pudo obtener el token de autenticación.');
     }
+
     await _validarAdministrador();
+
     final response = await http.delete(
       Uri.parse('https://qr-dispositivos.onrender.com/api/admin/users/$uid'),
       headers: {
@@ -583,6 +583,16 @@ class AuthService {
 
   // 13. CERRAR SESIÓN
   Future<void> cerrarSesion() async {
+    final desvinculada =
+        await NotificationService.desvincularInstalacion();
+
+    if (!desvinculada) {
+      throw Exception(
+        'No se pudo desvincular el dispositivo de las notificaciones. '
+        'Verifica tu conexión e inténtalo nuevamente.',
+      );
+    }
+
     await _auth.signOut();
   }
 
@@ -604,12 +614,6 @@ class AuthService {
 
     await user.updateDisplayName(nombreLimpio);
 
-    final cambios = <String, dynamic>{'profile/nombre': nombreLimpio};
-
-    if (fotoUrl != null) {
-      cambios['profile/foto_url'] = fotoUrl;
-    }
-
     await _db.child('users/${user.uid}/profile').update({
       'nombre': nombreLimpio,
       if (fotoUrl != null) 'foto_url': fotoUrl,
@@ -618,10 +622,7 @@ class AuthService {
     await user.reload();
   }
 
-  // ============================================================
   // VALIDAR QUE EL USUARIO ACTUAL SEA ADMINISTRADOR
-  // ============================================================
-
   Future<void> _validarAdministrador() async {
     final usuarioActual = _auth.currentUser;
 

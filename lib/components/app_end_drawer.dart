@@ -1,10 +1,14 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/user_model.dart';
+import '../providers/auth_provider.dart';
 import '../screens/edit_account_screen.dart';
 import '../screens/admin_users_screen.dart';
+import '../screens/devices_screen.dart';
+import '../screens/salones_screen.dart';
+import '../screens/my_devices_screen.dart';
+import '../screens/qr_scanner_screen.dart';
 import '../services/storage_service.dart';
 
 class AppEndDrawer extends ConsumerWidget {
@@ -17,17 +21,15 @@ class AppEndDrawer extends ConsumerWidget {
     required this.onLogout,
   });
 
-  Future<String?> _obtenerFoto() async {
-    final foto = userData.fotoUrl;
+  Future<String?> _obtenerFoto(String ruta) async {
+    if (ruta.isEmpty) return null;
 
-    if (foto.isEmpty) return null;
-
-    if (foto.startsWith('http://') || foto.startsWith('https://')) {
-      return foto;
+    if (ruta.startsWith('http://') || ruta.startsWith('https://')) {
+      return ruta;
     }
 
-    if (foto.startsWith('perfiles/')) {
-      return StorageService().obtenerUrlImagen(foto);
+    if (ruta.startsWith('perfiles/')) {
+      return StorageService().obtenerUrlImagen(ruta);
     }
 
     return null;
@@ -55,30 +57,36 @@ class AppEndDrawer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final esAdministrador = userData.role == 'admin';
+    // Obtener el perfil actualizado desde Firebase.
+    final perfilActual =
+        ref.watch(currentUserDataProvider).asData?.value ?? userData;
+
+    final esAdministrador = perfilActual.role == 'admin';
+
+    // Administradores y profesores autorizados pueden usar dispositivos.
+    final puedeUsarDispositivos = esAdministrador || perfilActual.autorizado;
 
     return Drawer(
       child: SafeArea(
         child: Column(
           children: [
+            // Información del usuario.
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 28,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
               color: Theme.of(context).colorScheme.primaryContainer,
               child: Column(
                 children: [
                   FutureBuilder<String?>(
-                    future: _obtenerFoto(),
+                    future: _obtenerFoto(perfilActual.fotoUrl),
                     builder: (context, snapshot) {
                       final foto = snapshot.data;
 
                       return CircleAvatar(
                         radius: 42,
-                        backgroundImage:
-                            foto != null ? NetworkImage(foto) : null,
+                        backgroundImage: foto != null
+                            ? NetworkImage(foto)
+                            : null,
                         child: foto == null
                             ? const Icon(Icons.person, size: 42)
                             : null,
@@ -87,9 +95,9 @@ class AppEndDrawer extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    userData.nombre.isEmpty
+                    perfilActual.nombre.isEmpty
                         ? 'Usuario'
-                        : userData.nombre,
+                        : perfilActual.nombre,
                     style: Theme.of(context).textTheme.titleLarge,
                     textAlign: TextAlign.center,
                   ),
@@ -97,7 +105,7 @@ class AppEndDrawer extends ConsumerWidget {
                   InkWell(
                     onTap: () => _mostrarInformacionCorreo(context),
                     child: Text(
-                      userData.email,
+                      perfilActual.email,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
@@ -110,52 +118,147 @@ class AppEndDrawer extends ConsumerWidget {
                           : Icons.person,
                       size: 18,
                     ),
-                    label: Text(
-                      esAdministrador ? 'Administrador' : 'Usuario',
-                    ),
+                    label: Text(esAdministrador ? 'Administrador' : 'Usuario'),
                   ),
+                  if (!esAdministrador && !perfilActual.autorizado) ...[
+                    const SizedBox(height: 4),
+                    const Chip(
+                      avatar: Icon(Icons.hourglass_top, size: 18),
+                      label: Text('Pendiente de aprobación'),
+                    ),
+                  ],
                 ],
               ),
             ),
 
-            if (esAdministrador)
-              ListTile(
-                leading: const Icon(Icons.manage_accounts_outlined),
-                title: const Text('Administrar usuarios'),
-                subtitle: const Text('Gestionar cuentas y permisos'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => AdminUsersScreen(
-                        userData: userData,
-                        onLogout: onLogout,
-                      ),
+            // Opciones de navegación.
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.account_circle_outlined),
+                      title: const Text('Editar cuenta'),
+                      subtitle: const Text('Perfil y métodos de acceso'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                EditAccountScreen(userData: perfilActual),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
 
-            ListTile(
-              leading: const Icon(Icons.account_circle_outlined),
-              title: const Text('Editar cuenta'),
-              subtitle: const Text('Perfil y métodos de acceso'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => EditAccountScreen(
-                      userData: userData,
-                    ),
-                  ),
-                );
-              },
+                    // Opciones exclusivas del administrador.
+                    if (esAdministrador) ...[
+                      ListTile(
+                        leading: const Icon(Icons.manage_accounts_outlined),
+                        title: const Text('Administrar usuarios'),
+                        subtitle: const Text('Gestionar cuentas y permisos'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AdminUsersScreen(
+                                userData: perfilActual,
+                                onLogout: onLogout,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                      ListTile(
+                        leading: const Icon(Icons.devices_other),
+                        title: const Text('Inventario de dispositivos'),
+                        subtitle: const Text(
+                          'Administrar dispositivos y códigos QR',
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DevicesScreen(
+                                userData: perfilActual,
+                                onLogout: onLogout,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                      ListTile(
+                        leading: const Icon(Icons.meeting_room_outlined),
+                        title: const Text('Administrar aulas'),
+                        subtitle: const Text('Gestionar salones y fotografías'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SalonesScreen(
+                                userData: perfilActual,
+                                esAdministrador: true,
+                                onLogout: onLogout,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+
+                    // Opciones para administradores y profesores autorizados.
+                    if (puedeUsarDispositivos) ...[
+                      ListTile(
+                        leading: const Icon(Icons.qr_code_scanner),
+                        title: const Text('Escanear dispositivo'),
+                        subtitle: const Text('Leer el código QR de un equipo'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => QrScannerScreen(
+                                userData: perfilActual,
+                                onLogout: onLogout,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                      ListTile(
+                        leading: const Icon(Icons.devices),
+                        title: const Text('Mis dispositivos'),
+                        subtitle: const Text(
+                          'Consultar dispositivos vinculados',
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => MyDevicesScreen(
+                                userData: perfilActual,
+                                onLogout: onLogout,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
 
-            const Spacer(),
-            const Divider(),
+            // Cerrar sesión.
+            const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
               title: const Text(
@@ -167,7 +270,7 @@ class AppEndDrawer extends ConsumerWidget {
                 await onLogout();
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
           ],
         ),
       ),

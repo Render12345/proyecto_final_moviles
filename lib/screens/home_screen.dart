@@ -1,14 +1,12 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:proyecto_final_moviles/screens/my_devices_screen.dart';
 
 import '../providers/auth_provider.dart';
-import '../screens/salones_screen.dart';
+import '../screens/devices_screen.dart';
+import '../screens/qr_scanner_screen.dart';
 import '../components/app_end_drawer.dart';
-import 'package:flutter/material.dart';
-
 import '../services/navigation_service.dart';
-
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -18,12 +16,8 @@ class HomeScreen extends ConsumerWidget {
     final userDataAsync = ref.watch(currentUserDataProvider);
 
     return userDataAsync.when(
-      loading: () => const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      ),
-
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (error, stackTrace) => Scaffold(
         body: Center(
           child: Padding(
@@ -35,13 +29,10 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
       ),
-
       data: (userData) {
         if (userData == null) {
           return Scaffold(
-            appBar: AppBar(
-              title: const Text('Perfil no encontrado'),
-            ),
+            appBar: AppBar(title: const Text('Perfil no encontrado')),
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -73,7 +64,7 @@ class HomeScreen extends ConsumerWidget {
         if (!esAdministrador && !userData.autorizado) {
           return Scaffold(
             appBar: AppBar(
-              title: Text('Hola, ${userData.nombre}'),
+              title: Text('Bienvenido , ${userData.nombre}'),
               actions: [
                 Builder(
                   builder: (context) => IconButton(
@@ -86,12 +77,10 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ],
             ),
-
             endDrawer: AppEndDrawer(
               userData: userData,
               onLogout: () => cerrarSesionSeguro(ref),
             ),
-
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -122,10 +111,15 @@ class HomeScreen extends ConsumerWidget {
           );
         }
 
-        // Administradores y profesores autorizados acceden a los salones.
-        return SalonesScreen(
+        if (esAdministrador) {
+          return DevicesScreen(
+            userData: userData,
+            onLogout: () => cerrarSesionSeguro(ref),
+          );
+        }
+
+        return MyDevicesScreen(
           userData: userData,
-          esAdministrador: esAdministrador,
           onLogout: () => cerrarSesionSeguro(ref),
         );
       },
@@ -133,10 +127,7 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-
 /// Cierra la sesión y regresa a la pantalla raíz.
-/// AuthGate se encargará de mostrar Login al detectar
-/// que Firebase ya no tiene un usuario autenticado.
 Future<void> cerrarSesionSeguro(WidgetRef ref) async {
   final isLoggingOut = ref.read(isLoggingOutProvider);
 
@@ -153,9 +144,7 @@ Future<void> cerrarSesionSeguro(WidgetRef ref) async {
 
     await authService.cerrarSesion();
 
-    navigatorKey.currentState?.popUntil(
-      (route) => route.isFirst,
-    );
+    navigatorKey.currentState?.popUntil((route) => route.isFirst);
   } catch (e) {
     debugPrint('Error al cerrar sesión: $e');
   } finally {
