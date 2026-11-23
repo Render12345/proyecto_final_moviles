@@ -1,10 +1,10 @@
-
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../components/cached_storage_image.dart';
 import '../models/salon_model.dart';
 import '../providers/salon_provider.dart';
 import '../services/storage_service.dart';
@@ -18,8 +18,7 @@ class SalonFormScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<SalonFormScreen> createState() =>
-      _SalonFormScreenState();
+  ConsumerState<SalonFormScreen> createState() => _SalonFormScreenState();
 }
 
 class _SalonFormScreenState extends ConsumerState<SalonFormScreen> {
@@ -34,8 +33,6 @@ class _SalonFormScreenState extends ConsumerState<SalonFormScreen> {
   XFile? _fotoSeleccionada;
   bool _quitarFoto = false;
   bool _guardando = false;
-
-  Future<String>? _fotoExistenteFuture;
 
   bool get _esEdicion => widget.salon != null;
 
@@ -56,11 +53,6 @@ class _SalonFormScreenState extends ConsumerState<SalonFormScreen> {
     _descripcionController = TextEditingController(
       text: widget.salon?.descripcion ?? '',
     );
-
-    if (_fotoActual != null && _fotoActual!.isNotEmpty) {
-      _fotoExistenteFuture =
-          _storageService.obtenerUrlFotoSalon(_fotoActual!);
-    }
   }
 
   @override
@@ -163,41 +155,29 @@ class _SalonFormScreenState extends ConsumerState<SalonFormScreen> {
         width: double.infinity,
         height: 190,
         fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _imagenPredeterminada();
+        },
       );
     }
 
-    if (_quitarFoto ||
-        _fotoActual == null ||
-        _fotoActual!.isEmpty) {
+    if (_quitarFoto || _fotoActual == null || _fotoActual!.isEmpty) {
       return _imagenPredeterminada();
     }
 
-    return FutureBuilder<String>(
-      future: _fotoExistenteFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 190,
-            child: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
-        }
-
-        if (snapshot.hasError || !snapshot.hasData) {
-          return _imagenPredeterminada();
-        }
-
-        return Image.network(
-          snapshot.data!,
-          width: double.infinity,
-          height: 190,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return _imagenPredeterminada();
-          },
-        );
-      },
+    return CachedStorageImage(
+      ruta: _fotoActual!,
+      tipo: CachedImageType.salon,
+      width: double.infinity,
+      height: 190,
+      fit: BoxFit.cover,
+      placeholder: const SizedBox(
+        height: 190,
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
+      ),
+      errorWidget: _imagenPredeterminada(),
     );
   }
 
@@ -386,9 +366,7 @@ class _SalonFormScreenState extends ConsumerState<SalonFormScreen> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _guardando
-                      ? null
-                      : _mostrarOpcionesFoto,
+                  onPressed: _guardando ? null : _mostrarOpcionesFoto,
                   icon: const Icon(Icons.add_a_photo_outlined),
                   label: const Text('Agregar o cambiar fotografía'),
                 ),

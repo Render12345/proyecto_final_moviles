@@ -1,8 +1,10 @@
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../components/cached_storage_image.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 
@@ -17,8 +19,6 @@ class EditAccountScreen extends ConsumerStatefulWidget {
 
 class _EditAccountScreenState extends ConsumerState<EditAccountScreen> {
   late final TextEditingController _nombreCtrl;
-  Future<String>? _urlFotoFuture;
-  String? _rutaFotoActual;
 
   bool get _puedeEditarFoto => widget.userData.provider == 'password';
 
@@ -46,10 +46,18 @@ class _EditAccountScreenState extends ConsumerState<EditAccountScreen> {
   }
 
   Future<void> _guardarNombre() async {
+    if (_nombreCtrl.text.trim().isEmpty) {
+      await _mostrarMensaje(
+        'El nombre no puede estar vacío.',
+        error: true,
+      );
+      return;
+    }
+
     try {
       await ref
           .read(authServiceProvider)
-          .actualizarPerfil(nombre: _nombreCtrl.text);
+          .actualizarPerfil(nombre: _nombreCtrl.text.trim());
 
       ref.invalidate(currentUserDataProvider);
 
@@ -77,6 +85,7 @@ class _EditAccountScreenState extends ConsumerState<EditAccountScreen> {
       final rutaAnterior =
           ref.read(currentUserDataProvider).value?.fotoUrl ??
           widget.userData.fotoUrl;
+
       final nuevaRuta = await storage.subirImagen(imagen: imagen);
 
       await authService.actualizarPerfil(
@@ -84,7 +93,8 @@ class _EditAccountScreenState extends ConsumerState<EditAccountScreen> {
         fotoUrl: nuevaRuta,
       );
 
-      if (rutaAnterior.startsWith('perfiles/')) {
+      if (rutaAnterior.startsWith('perfiles/') &&
+          rutaAnterior != nuevaRuta) {
         try {
           await storage.eliminarImagen(rutaAnterior);
         } catch (_) {
@@ -112,7 +122,6 @@ class _EditAccountScreenState extends ConsumerState<EditAccountScreen> {
 
       if (!mounted) return;
 
-      // Actualizar el estado de autenticación y los proveedores.
       ref.invalidate(firebaseAuthStateProvider);
 
       await _mostrarMensaje(mensaje);
@@ -147,7 +156,10 @@ class _EditAccountScreenState extends ConsumerState<EditAccountScreen> {
 
       await _mostrarMensaje('Correo y contraseña vinculados.');
     } catch (e) {
-      await _mostrarMensaje('No se pudo vincular el correo: $e', error: true);
+      await _mostrarMensaje(
+        'No se pudo vincular el correo: $e',
+        error: true,
+      );
     }
   }
 
@@ -159,6 +171,28 @@ class _EditAccountScreenState extends ConsumerState<EditAccountScreen> {
       );
     }
 
+    // Fotografías almacenadas en Supabase con caché local.
+    if (foto.startsWith('perfiles/')) {
+      return ClipOval(
+        child: SizedBox(
+          width: 96,
+          height: 96,
+          child: CachedStorageImage(
+            ruta: foto,
+            tipo: CachedImageType.perfil,
+            width: 96,
+            height: 96,
+            fit: BoxFit.cover,
+            errorWidget: const ColoredBox(
+              color: Colors.black12,
+              child: Icon(Icons.broken_image_outlined, size: 36),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Compatibilidad con fotografías mediante URL externa.
     if (foto.startsWith('http://') || foto.startsWith('https://')) {
       return CircleAvatar(
         key: ValueKey(foto),
@@ -167,41 +201,10 @@ class _EditAccountScreenState extends ConsumerState<EditAccountScreen> {
       );
     }
 
-    if (foto.startsWith('perfiles/')) {
-      if (_rutaFotoActual != foto) {
-        _rutaFotoActual = foto;
-        _urlFotoFuture = ref
-            .read(storageServiceProvider)
-            .obtenerUrlImagen(foto);
-      }
-
-      return FutureBuilder<String>(
-        key: ValueKey(foto),
-        future: _urlFotoFuture,
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            return CircleAvatar(
-              radius: 48,
-              backgroundImage: NetworkImage(snapshot.data!),
-            );
-          }
-
-          if (snapshot.hasError) {
-            return const CircleAvatar(
-              radius: 48,
-              child: Icon(Icons.broken_image_outlined),
-            );
-          }
-
-          return const CircleAvatar(
-            radius: 48,
-            child: CircularProgressIndicator(),
-          );
-        },
-      );
-    }
-
-    return const CircleAvatar(radius: 48, child: Icon(Icons.person, size: 48));
+    return const CircleAvatar(
+      radius: 48,
+      child: Icon(Icons.person, size: 48),
+    );
   }
 
   @override
@@ -226,7 +229,9 @@ class _EditAccountScreenState extends ConsumerState<EditAccountScreen> {
     final tienePassword = proveedores.contains('password');
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Editar cuenta')),
+      appBar: AppBar(
+        title: const Text('Editar cuenta'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -279,17 +284,23 @@ class _EditAccountScreenState extends ConsumerState<EditAccountScreen> {
             nombre: 'Google',
             vinculado: tieneGoogle,
             icono: Icons.g_mobiledata,
-            onVincular: () => _vincularProveedor(() async {
-              await ref.read(authServiceProvider).vincularGoogle();
-            }, 'Google vinculado correctamente.'),
+            onVincular: () => _vincularProveedor(
+              () async {
+                await ref.read(authServiceProvider).vincularGoogle();
+              },
+              'Google vinculado correctamente.',
+            ),
           ),
           _ProveedorTile(
             nombre: 'GitHub',
             vinculado: tieneGitHub,
             icono: Icons.code,
-            onVincular: () => _vincularProveedor(() async {
-              await ref.read(authServiceProvider).vincularGitHub();
-            }, 'GitHub vinculado correctamente.'),
+            onVincular: () => _vincularProveedor(
+              () async {
+                await ref.read(authServiceProvider).vincularGitHub();
+              },
+              'GitHub vinculado correctamente.',
+            ),
           ),
           _ProveedorTile(
             nombre: 'Correo y contraseña',
@@ -314,7 +325,8 @@ class _VincularCorreoDialog extends StatefulWidget {
   const _VincularCorreoDialog({required this.correoInicial});
 
   @override
-  State<_VincularCorreoDialog> createState() => _VincularCorreoDialogState();
+  State<_VincularCorreoDialog> createState() =>
+      _VincularCorreoDialogState();
 }
 
 class _VincularCorreoDialogState extends State<_VincularCorreoDialog> {
@@ -402,7 +414,10 @@ class _ProveedorTile extends StatelessWidget {
         subtitle: Text(vinculado ? 'Vinculado' : 'No vinculado'),
         trailing: vinculado
             ? const Icon(Icons.check_circle, color: Colors.green)
-            : TextButton(onPressed: onVincular, child: const Text('Vincular')),
+            : TextButton(
+                onPressed: onVincular,
+                child: const Text('Vincular'),
+              ),
       ),
     );
   }

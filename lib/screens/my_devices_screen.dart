@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../components/app_end_drawer.dart';
+import '../components/cached_storage_image.dart';
 import '../models/device_model.dart';
 import '../models/salon_model.dart';
 import '../models/schedule_model.dart';
@@ -15,7 +16,6 @@ import '../providers/schedule_provider.dart';
 import '../screens/device_detail_screen.dart';
 import '../screens/qr_scanner_screen.dart';
 import '../services/device_service.dart';
-import '../services/storage_service.dart';
 
 // ============================================================
 // ESTADOS VISUALES DEL DISPOSITIVO
@@ -601,8 +601,6 @@ class _TarjetaMiDispositivo extends ConsumerWidget {
                             '($programacionesPendientes pendientes)',
                   ),
                 ),
-
-                // Los administradores no necesitan reportar fallas.
                 if (!esAdmin) ...[
                   const SizedBox(height: 4),
                   OutlinedButton.icon(
@@ -966,23 +964,6 @@ class _TarjetaMiDispositivo extends ConsumerWidget {
       ),
     );
   }
-
-  static String _formatearFecha(DateTime fecha) {
-    final dia = fecha.day.toString().padLeft(2, '0');
-    final mes = fecha.month.toString().padLeft(2, '0');
-    final anio = fecha.year.toString();
-
-    return '$dia/$mes/$anio';
-  }
-
-  static String _formatearFechaHora(DateTime fecha) {
-    final fechaLocal = fecha.toLocal();
-
-    final hora = fechaLocal.hour.toString().padLeft(2, '0');
-    final minuto = fechaLocal.minute.toString().padLeft(2, '0');
-
-    return '${_formatearFecha(fechaLocal)} $hora:$minuto';
-  }
 }
 
 // ============================================================
@@ -1292,91 +1273,46 @@ class _ElementoProgramacion extends ConsumerWidget {
 }
 
 // ============================================================
-// FOTOGRAFÍA DEL SALÓN
+// FOTOGRAFÍA DEL SALÓN CON CACHÉ LOCAL
 // ============================================================
 
-class _FotoSalon extends StatefulWidget {
+class _FotoSalon extends StatelessWidget {
   final SalonModel? salon;
 
   const _FotoSalon({required this.salon});
 
   @override
-  State<_FotoSalon> createState() => _FotoSalonState();
-}
-
-class _FotoSalonState extends State<_FotoSalon> {
-  late Future<String?> _fotoFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _fotoFuture = _obtenerFoto();
-  }
-
-  @override
-  void didUpdateWidget(covariant _FotoSalon oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.salon?.fotoUrl != widget.salon?.fotoUrl) {
-      _fotoFuture = _obtenerFoto();
-    }
-  }
-
-  Future<String?> _obtenerFoto() async {
-    final ruta = widget.salon?.fotoUrl;
+  Widget build(BuildContext context) {
+    final ruta = salon?.fotoUrl;
 
     if (ruta == null || ruta.isEmpty) {
-      return null;
+      return _fotoNoDisponible();
     }
 
-    if (ruta.startsWith('http://') || ruta.startsWith('https://')) {
-      return ruta;
-    }
-
-    try {
-      return await StorageService().obtenerUrlFotoSalon(ruta);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
       height: 180,
-      child: FutureBuilder<String?>(
-        future: _fotoFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Container(
-              color: Colors.grey.shade200,
-              child: const Center(child: CircularProgressIndicator()),
-            );
-          }
-
-          final url = snapshot.data;
-
-          if (url == null || url.isEmpty) {
-            return _fotoNoDisponible();
-          }
-
-          return Image.network(
-            url,
-            width: double.infinity,
-            height: 180,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
-              return _fotoNoDisponible();
-            },
-          );
-        },
+      child: CachedStorageImage(
+        ruta: ruta,
+        tipo: CachedImageType.salon,
+        width: double.infinity,
+        height: 180,
+        fit: BoxFit.cover,
+        placeholder: Container(
+          color: Colors.grey.shade200,
+          child: const Center(
+            child: CircularProgressIndicator(),
+          ),
+        ),
+        errorWidget: _fotoNoDisponible(),
       ),
     );
   }
 
   Widget _fotoNoDisponible() {
     return Container(
+      width: double.infinity,
+      height: 180,
       color: Colors.grey.shade200,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1388,7 +1324,7 @@ class _FotoSalonState extends State<_FotoSalon> {
           ),
           const SizedBox(height: 8),
           Text(
-            widget.salon == null
+            salon == null
                 ? 'Salón sin asignar'
                 : 'Sin fotografía del salón',
             style: TextStyle(color: Colors.grey.shade700),

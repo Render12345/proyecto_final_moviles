@@ -69,50 +69,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   // RECUPERAR CONTRASEÑA
-  void _dialogoRecuperarPassword() {
-    final resetCtrl = TextEditingController(text: _emailCtrl.text);
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Recuperar contraseña'),
-        content: TextField(
-          controller: resetCtrl,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(
-            labelText: 'Ingresa tu correo registrado',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (resetCtrl.text.trim().isEmpty) return;
-
-              try {
-                await ref
-                    .read(authServiceProvider)
-                    .recuperarPassword(resetCtrl.text);
-
-                if (ctx.mounted) Navigator.pop(ctx);
-
-                _mostrarMensaje('Correo de recuperación enviado.');
-              } catch (e) {
-                _mostrarMensaje('Error: $e', esError: true);
-              } finally {
-                resetCtrl.dispose();
-              }
-            },
-            child: const Text('Enviar enlace'),
-          ),
-        ],
-      ),
-    );
-  }
 
   Future<String?> _mostrarOpcionesCuentaExistente() {
     return showDialog<String>(
@@ -316,14 +273,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         : null,
                   ),
 
-                  if (!uiState.isRegisterMode)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: _dialogoRecuperarPassword,
-                        child: const Text('¿Olvidaste tu contraseña?'),
-                      ),
-                    ),
+                  
 
                   const SizedBox(height: 12),
 

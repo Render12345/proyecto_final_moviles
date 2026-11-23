@@ -1,16 +1,21 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:proyecto_final_moviles/screens/admin_reports_screen.dart';
 
+import '../components/app_end_drawer.dart';
+import '../components/cached_storage_image.dart';
 import '../models/device_model.dart';
 import '../models/salon_model.dart';
 import '../models/user_model.dart';
 import '../providers/device_provider.dart';
 import '../providers/salon_provider.dart';
-import '../components/app_end_drawer.dart';
-import '../services/storage_service.dart';
 
-import 'dart:convert';
+
+
+
+
 
 class DevicesScreen extends ConsumerWidget {
   final UserModel userData;
@@ -35,42 +40,51 @@ class DevicesScreen extends ConsumerWidget {
         title: const Text('Dispositivos del servidor'),
         centerTitle: true,
         actions: [
-  IconButton(
-    tooltip: 'Reportes de fallas',
-    icon: const Icon(Icons.assignment_late_outlined),
-    onPressed: () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => AdminReportsScreen(
-            userData: userData,
-            onLogout: onLogout,
+          IconButton(
+            tooltip: 'Reportes de fallas',
+            icon: const Icon(Icons.assignment_late_outlined),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AdminReportsScreen(
+                    userData: userData,
+                    onLogout: onLogout,
+                  ),
+                ),
+              );
+            },
           ),
-        ),
-      );
-    },
-  ),
-  Builder(
-    builder: (context) => IconButton(
-      tooltip: 'Opciones de cuenta',
-      icon: const Icon(Icons.menu),
-      onPressed: () {
-        Scaffold.of(context).openEndDrawer();
-      },
-    ),
-  ),
-],
+          Builder(
+            builder: (context) => IconButton(
+              tooltip: 'Opciones de cuenta',
+              icon: const Icon(Icons.menu),
+              onPressed: () {
+                Scaffold.of(context).openEndDrawer();
+              },
+            ),
+          ),
+        ],
       ),
-      endDrawer: AppEndDrawer(userData: userData, onLogout: onLogout),
+      endDrawer: AppEndDrawer(
+        userData: userData,
+        onLogout: onLogout,
+      ),
       body: dispositivosAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(
+          child: CircularProgressIndicator(),
+        ),
         error: (error, stack) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const Icon(
+                  Icons.error_outline,
+                  color: Colors.red,
+                  size: 48,
+                ),
                 const SizedBox(height: 12),
                 const Text(
                   'No se pudieron cargar los dispositivos.',
@@ -78,7 +92,10 @@ class DevicesScreen extends ConsumerWidget {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                Text(error.toString(), textAlign: TextAlign.center),
+                Text(
+                  error.toString(),
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 16),
                 ElevatedButton.icon(
                   onPressed: () {
@@ -99,7 +116,11 @@ class DevicesScreen extends ConsumerWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.devices_other, size: 80, color: Colors.grey),
+                    Icon(
+                      Icons.devices_other,
+                      size: 80,
+                      color: Colors.grey,
+                    ),
                     SizedBox(height: 16),
                     Text(
                       'No hay dispositivos registrados.',
@@ -123,7 +144,9 @@ class DevicesScreen extends ConsumerWidget {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _EncabezadoDispositivos(cantidad: dispositivos.length),
+                _EncabezadoDispositivos(
+                  cantidad: dispositivos.length,
+                ),
                 const SizedBox(height: 16),
                 ...dispositivos.map((dispositivo) {
                   SalonModel? salon;
@@ -154,7 +177,9 @@ class DevicesScreen extends ConsumerWidget {
 class _EncabezadoDispositivos extends StatelessWidget {
   final int cantidad;
 
-  const _EncabezadoDispositivos({required this.cantidad});
+  const _EncabezadoDispositivos({
+    required this.cantidad,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -168,7 +193,10 @@ class _EncabezadoDispositivos extends StatelessWidget {
             children: [
               const Text(
                 'Dispositivos registrados',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               Text(
                 '$cantidad ${cantidad == 1 ? 'dispositivo encontrado' : 'dispositivos encontrados'}',
@@ -197,156 +225,158 @@ class _TarjetaDispositivo extends ConsumerWidget {
     required this.esAdministrador,
   });
 
-  
-Future<void> _asignarSalon(BuildContext context, WidgetRef ref) async {
-  // Eliminamos salones sin identificador y duplicados.
-  final Map<String, SalonModel> salonesUnicos = {};
+  Future<void> _asignarSalon(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final Map<String, SalonModel> salonesUnicos = {};
 
-  for (final elemento in salones) {
-    final id = elemento.id.trim();
+    for (final elemento in salones) {
+      final id = elemento.id.trim();
 
-    if (id.isNotEmpty) {
-      salonesUnicos.putIfAbsent(id, () => elemento);
+      if (id.isNotEmpty) {
+        salonesUnicos.putIfAbsent(id, () => elemento);
+      }
     }
-  }
 
-  final opcionesSalones = salonesUnicos.values.toList();
+    final opcionesSalones = salonesUnicos.values.toList();
 
-  // Solo seleccionamos el salón actual si realmente existe.
-  final salonActualId = dispositivo.salonId;
+    final salonActualId = dispositivo.salonId;
 
-  String salonSeleccionado =
-      salonActualId != null && salonesUnicos.containsKey(salonActualId)
-          ? salonActualId
-          : '';
+    String salonSeleccionado =
+        salonActualId != null &&
+                salonesUnicos.containsKey(salonActualId)
+            ? salonActualId
+            : '';
 
-  final resultado = await showDialog<String>(
-    context: context,
-    builder: (dialogContext) {
-      return StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: const Text('Asignar salón'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Dispositivo: ${dispositivo.deviceId}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                DropdownButtonFormField<String>(
-                  initialValue: salonSeleccionado,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Salón',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: '',
-                      child: Text('Sin asignar'),
+    final resultado = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Asignar salón'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Dispositivo: ${dispositivo.deviceId}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
                     ),
-                    ...opcionesSalones.map(
-                      (elemento) => DropdownMenuItem<String>(
-                        value: elemento.id,
-                        child: Text(
-                          elemento.nombre,
-                          overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: salonSeleccionado,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Salón',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: '',
+                        child: Text('Sin asignar'),
+                      ),
+                      ...opcionesSalones.map(
+                        (elemento) => DropdownMenuItem<String>(
+                          value: elemento.id,
+                          child: Text(
+                            elemento.nombre,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
+                      ),
+                    ],
+                    onChanged: (valor) {
+                      setDialogState(() {
+                        salonSeleccionado = valor ?? '';
+                      });
+                    },
+                  ),
+                  if (opcionesSalones.isEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'No hay salones registrados disponibles.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ],
+                  if (salonActualId != null &&
+                      salonActualId.isNotEmpty &&
+                      !salonesUnicos.containsKey(salonActualId)) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'El salón actualmente asignado ya no aparece '
+                      'en la lista. Selecciona otro salón o deja '
+                      'el dispositivo sin asignar.',
+                      style: TextStyle(
+                        color: Colors.orange.shade800,
+                        fontSize: 13,
                       ),
                     ),
                   ],
-                  onChanged: (valor) {
-                    setDialogState(() {
-                      salonSeleccionado = valor ?? '';
-                    });
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
                   },
+                  child: const Text('Cancelar'),
                 ),
-
-                if (opcionesSalones.isEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Text(
-                    'No hay salones registrados disponibles.',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-
-                if (salonActualId != null &&
-                    salonActualId.isNotEmpty &&
-                    !salonesUnicos.containsKey(salonActualId)) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'El salón actualmente asignado ya no aparece '
-                    'en la lista. Selecciona otro salón o deja '
-                    'el dispositivo sin asignar.',
-                    style: TextStyle(
-                      color: Colors.orange.shade800,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(
+                      dialogContext,
+                      salonSeleccionado,
+                    );
+                  },
+                  child: const Text('Guardar'),
+                ),
               ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                },
-                child: const Text('Cancelar'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(dialogContext, salonSeleccionado);
-                },
-                child: const Text('Guardar'),
-              ),
-            ],
-          );
-        },
+            );
+          },
+        );
+      },
+    );
+
+    if (resultado == null) return;
+
+    final nuevoSalonId = resultado.isEmpty ? null : resultado;
+
+    if (nuevoSalonId == dispositivo.salonId) return;
+
+    try {
+      await ref.read(deviceServiceProvider).asignarSalon(
+        deviceId: dispositivo.deviceId,
+        salonId: nuevoSalonId,
       );
-    },
-  );
 
-  // null significa que el usuario canceló.
-  if (resultado == null) return;
+      ref.invalidate(devicesProvider);
 
-  final nuevoSalonId = resultado.isEmpty ? null : resultado;
+      if (!context.mounted) return;
 
-  if (nuevoSalonId == dispositivo.salonId) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Asignación actualizada correctamente.'),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
 
-  try {
-    await ref.read(deviceServiceProvider).asignarSalon(
-      deviceId: dispositivo.deviceId,
-      salonId: nuevoSalonId,
-    );
-
-    ref.invalidate(devicesProvider);
-
-    if (!context.mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Asignación actualizada correctamente.'),
-      ),
-    );
-  } catch (error) {
-    if (!context.mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('No se pudo asignar el salón: $error'),
-      ),
-    );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo asignar el salón: $error'),
+        ),
+      );
+    }
   }
-}
 
-
-  Future<void> _mostrarQr(BuildContext context, WidgetRef ref) async {
+  Future<void> _mostrarQr(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     try {
       final qrDataUrl = await ref
           .read(deviceServiceProvider)
@@ -357,7 +387,9 @@ Future<void> _asignarSalon(BuildContext context, WidgetRef ref) async {
       final partes = qrDataUrl.split(',');
 
       if (partes.length < 2) {
-        throw Exception('El formato de la imagen QR no es válido.');
+        throw Exception(
+          'El formato de la imagen QR no es válido.',
+        );
       }
 
       final imagenBytes = base64Decode(partes.last);
@@ -378,7 +410,9 @@ Future<void> _asignarSalon(BuildContext context, WidgetRef ref) async {
               const SizedBox(height: 12),
               Text(
                 dispositivo.deviceId,
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -411,7 +445,8 @@ Future<void> _asignarSalon(BuildContext context, WidgetRef ref) async {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
 
-    final tieneFoto = salon?.fotoUrl != null && salon!.fotoUrl!.isNotEmpty;
+    final tieneFoto =
+        salon?.fotoUrl != null && salon!.fotoUrl!.isNotEmpty;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -419,7 +454,33 @@ Future<void> _asignarSalon(BuildContext context, WidgetRef ref) async {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (tieneFoto) _FotoSalon(ruta: salon!.fotoUrl!),
+          if (tieneFoto)
+            CachedStorageImage(
+              ruta: salon!.fotoUrl!,
+              tipo: CachedImageType.salon,
+              height: 170,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              placeholder: const SizedBox(
+                height: 150,
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+              errorWidget: Container(
+                height: 120,
+                width: double.infinity,
+                color: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHighest,
+                child: const Center(
+                  child: Icon(
+                    Icons.image_not_supported_outlined,
+                    size: 40,
+                  ),
+                ),
+              ),
+            ),
           ListTile(
             contentPadding: const EdgeInsets.all(16),
             leading: CircleAvatar(
@@ -431,7 +492,9 @@ Future<void> _asignarSalon(BuildContext context, WidgetRef ref) async {
             ),
             title: Text(
               dispositivo.deviceId,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
             ),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -440,12 +503,19 @@ Future<void> _asignarSalon(BuildContext context, WidgetRef ref) async {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.meeting_room_outlined, size: 16),
+                      const Icon(
+                        Icons.meeting_room_outlined,
+                        size: 16,
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          salon != null ? salon!.nombre : 'Sin salón asignado',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          salon != null
+                              ? salon!.nombre
+                              : 'Sin salón asignado',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
@@ -468,7 +538,9 @@ Future<void> _asignarSalon(BuildContext context, WidgetRef ref) async {
                       ),
                       IconButton(
                         tooltip: 'Asignar o cambiar salón',
-                        icon: const Icon(Icons.edit_location_alt_outlined),
+                        icon: const Icon(
+                          Icons.edit_location_alt_outlined,
+                        ),
                         onPressed: () => _asignarSalon(context, ref),
                       ),
                     ],
@@ -481,77 +553,4 @@ Future<void> _asignarSalon(BuildContext context, WidgetRef ref) async {
   }
 }
 
-class _FotoSalon extends StatefulWidget {
-  final String ruta;
 
-  const _FotoSalon({required this.ruta});
-
-  @override
-  State<_FotoSalon> createState() => _FotoSalonState();
-}
-
-class _FotoSalonState extends State<_FotoSalon> {
-  late Future<String> _urlFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _cargarUrl();
-  }
-
-  @override
-  void didUpdateWidget(covariant _FotoSalon oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.ruta != widget.ruta) {
-      _cargarUrl();
-    }
-  }
-
-  void _cargarUrl() {
-    _urlFuture = StorageService().obtenerUrlFotoSalon(widget.ruta);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _urlFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 150,
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        if (snapshot.hasError || !snapshot.hasData) {
-          return Container(
-            height: 120,
-            width: double.infinity,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: const Center(
-              child: Icon(Icons.image_not_supported_outlined, size: 40),
-            ),
-          );
-        }
-
-        return Image.network(
-          snapshot.data!,
-          height: 170,
-          width: double.infinity,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              height: 120,
-              width: double.infinity,
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: const Center(
-                child: Icon(Icons.broken_image_outlined, size: 40),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}

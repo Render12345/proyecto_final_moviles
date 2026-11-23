@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/user_model.dart';
-import '../models/salon_model.dart';
-import '../providers/salon_provider.dart';
 import '../components/app_end_drawer.dart';
+import '../components/cached_storage_image.dart';
+import '../models/salon_model.dart';
+import '../models/user_model.dart';
+import '../providers/salon_provider.dart';
 import 'salon_form_screen.dart';
-import '../services/storage_service.dart';
-import 'devices_screen.dart';
-import '../providers/device_provider.dart';
 
 class SalonesScreen extends ConsumerWidget {
   final UserModel userData;
@@ -195,6 +193,10 @@ class SalonesScreen extends ConsumerWidget {
   }
 }
 
+// ============================================================
+// ENCABEZADO
+// ============================================================
+
 class _EncabezadoSalones extends StatelessWidget {
   final int cantidad;
 
@@ -228,6 +230,10 @@ class _EncabezadoSalones extends StatelessWidget {
   }
 }
 
+// ============================================================
+// TARJETA DE SALÓN
+// ============================================================
+
 class _TarjetaSalon extends StatelessWidget {
   final SalonModel salon;
   final bool esAdministrador;
@@ -246,6 +252,7 @@ class _TarjetaSalon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final rutaFoto = salon.fotoUrl;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -255,54 +262,19 @@ class _TarjetaSalon extends StatelessWidget {
         children: [
           AspectRatio(
             aspectRatio: 16 / 9,
-            child: salon.fotoUrl == null || salon.fotoUrl!.isEmpty
-                ? Container(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    child: Icon(
-                      Icons.meeting_room_outlined,
-                      size: 64,
-                      color: theme.colorScheme.onSurfaceVariant,
+            child: rutaFoto == null || rutaFoto.isEmpty
+                ? _fotoNoDisponible(theme)
+                : CachedStorageImage(
+                    ruta: rutaFoto,
+                    tipo: CachedImageType.salon,
+                    width: double.infinity,
+                    height: double.infinity,
+                    fit: BoxFit.cover,
+                    placeholder: Container(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      child: const Center(child: CircularProgressIndicator()),
                     ),
-                  )
-                : FutureBuilder<String>(
-                    future: StorageService().obtenerUrlFotoSalon(
-                      salon.fotoUrl!,
-                    ),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return Container(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: const Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                        );
-                      }
-
-                      if (snapshot.hasError || !snapshot.hasData) {
-                        return Container(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: const Icon(
-                            Icons.broken_image_outlined,
-                            size: 48,
-                          ),
-                        );
-                      }
-
-                      return Image.network(
-                        snapshot.data!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            child: const Icon(
-                              Icons.broken_image_outlined,
-                              size: 48,
-                            ),
-                          );
-                        },
-                      );
-                    },
+                    errorWidget: _fotoNoDisponible(theme),
                   ),
           ),
           Padding(
@@ -382,7 +354,22 @@ class _TarjetaSalon extends StatelessWidget {
       ),
     );
   }
+
+  Widget _fotoNoDisponible(ThemeData theme) {
+    return Container(
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Icon(
+        Icons.meeting_room_outlined,
+        size: 64,
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
 }
+
+// ============================================================
+// ESTADO VACÍO
+// ============================================================
 
 class _EstadoVacio extends StatelessWidget {
   final bool esAdministrador;

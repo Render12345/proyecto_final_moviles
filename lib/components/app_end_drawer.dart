@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:proyecto_final_moviles/screens/subscription_screen.dart';
 
+import '../components/cached_storage_image.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
+import '../providers/theme_provider.dart';
 import '../screens/edit_account_screen.dart';
 import '../screens/admin_users_screen.dart';
 import '../screens/devices_screen.dart';
 import '../screens/salones_screen.dart';
 import '../screens/my_devices_screen.dart';
 import '../screens/qr_scanner_screen.dart';
-import '../services/storage_service.dart';
+import '../screens/subscription_screen.dart';
 
 class AppEndDrawer extends ConsumerWidget {
   final UserModel userData;
@@ -21,20 +22,6 @@ class AppEndDrawer extends ConsumerWidget {
     required this.userData,
     required this.onLogout,
   });
-
-  Future<String?> _obtenerFoto(String ruta) async {
-    if (ruta.isEmpty) return null;
-
-    if (ruta.startsWith('http://') || ruta.startsWith('https://')) {
-      return ruta;
-    }
-
-    if (ruta.startsWith('perfiles/')) {
-      return StorageService().obtenerUrlImagen(ruta);
-    }
-
-    return null;
-  }
 
   void _mostrarInformacionCorreo(BuildContext context) {
     showDialog(
@@ -58,14 +45,13 @@ class AppEndDrawer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Obtener el perfil actualizado desde Firebase.
     final perfilActual =
         ref.watch(currentUserDataProvider).asData?.value ?? userData;
 
     final esAdministrador = perfilActual.role == 'admin';
-
-    // Administradores y profesores autorizados pueden usar dispositivos.
     final puedeUsarDispositivos = esAdministrador || perfilActual.autorizado;
+
+    final temaSeleccionado = ref.watch(themeModeProvider);
 
     return Drawer(
       child: SafeArea(
@@ -74,25 +60,16 @@ class AppEndDrawer extends ConsumerWidget {
             // Información del usuario.
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 28,
+              ),
               color: Theme.of(context).colorScheme.primaryContainer,
               child: Column(
                 children: [
-                  FutureBuilder<String?>(
-                    future: _obtenerFoto(perfilActual.fotoUrl),
-                    builder: (context, snapshot) {
-                      final foto = snapshot.data;
-
-                      return CircleAvatar(
-                        radius: 42,
-                        backgroundImage: foto != null
-                            ? NetworkImage(foto)
-                            : null,
-                        child: foto == null
-                            ? const Icon(Icons.person, size: 42)
-                            : null,
-                      );
-                    },
+                  CachedProfileAvatar(
+                    ruta: perfilActual.fotoUrl,
+                    radius: 42,
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -119,7 +96,9 @@ class AppEndDrawer extends ConsumerWidget {
                           : Icons.person,
                       size: 18,
                     ),
-                    label: Text(esAdministrador ? 'Administrador' : 'Usuario'),
+                    label: Text(
+                      esAdministrador ? 'Administrador' : 'Usuario',
+                    ),
                   ),
                   if (!esAdministrador && !perfilActual.autorizado) ...[
                     const SizedBox(height: 4),
@@ -137,6 +116,7 @@ class AppEndDrawer extends ConsumerWidget {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
+                    // Perfil.
                     ListTile(
                       leading: const Icon(Icons.account_circle_outlined),
                       title: const Text('Editar cuenta'),
@@ -172,7 +152,6 @@ class AppEndDrawer extends ConsumerWidget {
                           );
                         },
                       ),
-
                       ListTile(
                         leading: const Icon(Icons.devices_other),
                         title: const Text('Inventario de dispositivos'),
@@ -192,11 +171,12 @@ class AppEndDrawer extends ConsumerWidget {
                           );
                         },
                       ),
-
                       ListTile(
                         leading: const Icon(Icons.meeting_room_outlined),
                         title: const Text('Administrar aulas'),
-                        subtitle: const Text('Gestionar salones y fotografías'),
+                        subtitle: const Text(
+                          'Gestionar salones y fotografías',
+                        ),
                         onTap: () {
                           Navigator.pop(context);
                           Navigator.push(
@@ -218,7 +198,9 @@ class AppEndDrawer extends ConsumerWidget {
                       ListTile(
                         leading: const Icon(Icons.qr_code_scanner),
                         title: const Text('Escanear dispositivo'),
-                        subtitle: const Text('Leer el código QR de un equipo'),
+                        subtitle: const Text(
+                          'Leer el código QR de un equipo',
+                        ),
                         onTap: () {
                           Navigator.pop(context);
                           Navigator.push(
@@ -232,7 +214,6 @@ class AppEndDrawer extends ConsumerWidget {
                           );
                         },
                       ),
-
                       ListTile(
                         leading: const Icon(Icons.devices),
                         title: const Text('Mis dispositivos'),
@@ -252,11 +233,12 @@ class AppEndDrawer extends ConsumerWidget {
                           );
                         },
                       ),
-
                       ListTile(
                         leading: const Icon(Icons.card_membership_outlined),
                         title: const Text('Planes y suscripciones'),
-                        subtitle: const Text('Consultar y administrar tu plan'),
+                        subtitle: const Text(
+                          'Consultar y administrar tu plan',
+                        ),
                         onTap: () {
                           Navigator.pop(context);
                           Navigator.push(
@@ -269,6 +251,48 @@ class AppEndDrawer extends ConsumerWidget {
                         },
                       ),
                     ],
+
+                    // Configuración de apariencia.
+                    const Divider(),
+
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Apariencia',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                    ),
+
+                    RadioGroup<ThemeMode>(
+                      groupValue: temaSeleccionado,
+                      onChanged: (tema) {
+                        if (tema != null) {
+                          ref
+                              .read(themeModeProvider.notifier)
+                              .cambiarTema(tema);
+                        }
+                      },
+                      child: const Column(
+                        children: [
+                          RadioListTile<ThemeMode>(
+                            value: ThemeMode.light,
+                            title: Text('Claro'),
+                            secondary: Icon(Icons.light_mode_outlined),
+                          ),
+                          RadioListTile<ThemeMode>(
+                            value: ThemeMode.dark,
+                            title: Text('Oscuro'),
+                            secondary: Icon(Icons.dark_mode_outlined),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),

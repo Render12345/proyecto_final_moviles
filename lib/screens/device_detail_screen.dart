@@ -1,13 +1,14 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../components/cached_storage_image.dart';
 import '../models/device_model.dart';
 import '../models/salon_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/device_provider.dart';
 import '../providers/salon_provider.dart';
 import '../providers/report_provider.dart';
-import '../services/storage_service.dart';
 
 class DeviceDetailScreen extends ConsumerWidget {
   final String deviceId;
@@ -146,9 +147,7 @@ class _ContenidoDispositivo extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Salón: ${salon!.nombre}',
-              ),
+              Text('Salón: ${salon!.nombre}'),
               const SizedBox(height: 12),
               const Text(
                 'Puedes agregar una descripción de la falla (opcional).',
@@ -227,10 +226,12 @@ class _ContenidoDispositivo extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+
     final tieneFoto =
         salon?.fotoUrl != null && salon!.fotoUrl!.isNotEmpty;
 
     final usuarioAsync = ref.watch(currentUserDataProvider);
+
     final esAdministrador =
         usuarioAsync.asData?.value?.role == 'admin';
 
@@ -240,7 +241,29 @@ class _ContenidoDispositivo extends ConsumerWidget {
         if (tieneFoto) ...[
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: _FotoSalon(ruta: salon!.fotoUrl!),
+            child: CachedStorageImage(
+              ruta: salon!.fotoUrl!,
+              tipo: CachedImageType.salon,
+              height: 220,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              placeholder: const SizedBox(
+                height: 200,
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+              errorWidget: Container(
+                height: 180,
+                color: theme.colorScheme.surfaceContainerHighest,
+                child: const Center(
+                  child: Icon(
+                    Icons.image_not_supported_outlined,
+                    size: 48,
+                  ),
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 20),
         ] else ...[
@@ -429,89 +452,6 @@ class _DatoDispositivo extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _FotoSalon extends StatefulWidget {
-  final String ruta;
-
-  const _FotoSalon({
-    required this.ruta,
-  });
-
-  @override
-  State<_FotoSalon> createState() => _FotoSalonState();
-}
-
-class _FotoSalonState extends State<_FotoSalon> {
-  late Future<String> _urlFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _cargarUrl();
-  }
-
-  @override
-  void didUpdateWidget(covariant _FotoSalon oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.ruta != widget.ruta) {
-      _cargarUrl();
-    }
-  }
-
-  void _cargarUrl() {
-    _urlFuture = StorageService().obtenerUrlFotoSalon(widget.ruta);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _urlFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 200,
-            child: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
-        }
-
-        if (snapshot.hasError || !snapshot.hasData) {
-          return Container(
-            height: 180,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: const Center(
-              child: Icon(
-                Icons.image_not_supported_outlined,
-                size: 48,
-              ),
-            ),
-          );
-        }
-
-        return Image.network(
-          snapshot.data!,
-          height: 220,
-          width: double.infinity,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              height: 180,
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: const Center(
-                child: Icon(
-                  Icons.broken_image_outlined,
-                  size: 48,
-                ),
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'providers/theme_provider.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,36 +13,22 @@ import 'services/navigation_service.dart';
 import 'services/notification_service.dart';
 
 @pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(
-  RemoteMessage message,
-) async {
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  debugPrint(
-    'Notificación recibida en segundo plano: ${message.messageId}',
-  );
+  debugPrint('Notificación recibida en segundo plano: ${message.messageId}');
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  FirebaseMessaging.onBackgroundMessage(
-    firebaseMessagingBackgroundHandler,
-  );
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
   await NotificationService.initialize();
 
-  runApp(
-    const ProviderScope(
-      child: MyApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: MyApp()));
 
   // Procesar una notificación que abrió la aplicación
   // cuando ya exista un navegador disponible.
@@ -50,11 +37,13 @@ Future<void> main() async {
   });
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final temaSeleccionado = ref.watch(themeModeProvider);
+
     return MaterialApp(
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
@@ -69,7 +58,7 @@ class MyApp extends StatelessWidget {
         colorSchemeSeed: Colors.blue,
         brightness: Brightness.dark,
       ),
-      themeMode: ThemeMode.system,
+      themeMode: temaSeleccionado,
       home: const AuthGate(),
     );
   }
@@ -84,9 +73,8 @@ class AuthGate extends ConsumerWidget {
 
     return authState.when(
       loading: () => const _PantallaCarga(),
-      error: (error, stackTrace) => _PantallaError(
-        mensaje: 'Error al verificar la sesión: $error',
-      ),
+      error: (error, stackTrace) =>
+          _PantallaError(mensaje: 'Error al verificar la sesión: $error'),
       data: (authUser) {
         if (authUser == null) {
           return const LoginScreen();
@@ -111,20 +99,14 @@ class _PantallaCarga extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
 class _PantallaError extends StatelessWidget {
   final String mensaje;
 
-  const _PantallaError({
-    required this.mensaje,
-  });
+  const _PantallaError({required this.mensaje});
 
   @override
   Widget build(BuildContext context) {
@@ -135,16 +117,9 @@ class _PantallaError extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 56,
-              ),
+              const Icon(Icons.error_outline, color: Colors.red, size: 56),
               const SizedBox(height: 16),
-              Text(
-                mensaje,
-                textAlign: TextAlign.center,
-              ),
+              Text(mensaje, textAlign: TextAlign.center),
             ],
           ),
         ),
