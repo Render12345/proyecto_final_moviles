@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:proyecto_final_moviles/screens/subscription_screen.dart';
 
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
@@ -247,6 +248,22 @@ class AppEndDrawer extends ConsumerWidget {
                                 userData: perfilActual,
                                 onLogout: onLogout,
                               ),
+                            ),
+                          );
+                        },
+                      ),
+
+                      ListTile(
+                        leading: const Icon(Icons.card_membership_outlined),
+                        title: const Text('Planes y suscripciones'),
+                        subtitle: const Text('Consultar y administrar tu plan'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  SubscriptionScreen(userData: perfilActual),
                             ),
                           );
                         },

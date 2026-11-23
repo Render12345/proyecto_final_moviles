@@ -603,7 +603,7 @@ class _TarjetaMiDispositivo extends ConsumerWidget {
                 ),
 
                 // Los administradores no necesitan reportar fallas.
-              
+                if (!esAdmin) ...[
                   const SizedBox(height: 4),
                   OutlinedButton.icon(
                     onPressed: () => _mostrarDialogoReporte(context, ref),
@@ -614,7 +614,7 @@ class _TarjetaMiDispositivo extends ConsumerWidget {
                       side: BorderSide(color: Colors.red.shade300),
                     ),
                   ),
-              
+                ],
               ],
             ),
           ),
