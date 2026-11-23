@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,6 +16,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _nombreCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+
+  Future<void> _recuperarPassword() async {
+    final email = await showDialog<String>(
+      context: context,
+      builder: (_) => const _DialogoRecuperarPassword(),
+    );
+
+    if (!mounted || email == null) return;
+
+    if (email.isEmpty || !email.contains('@')) {
+      _mostrarMensaje('Ingresa un correo electrónico válido.', esError: true);
+      return;
+    }
+
+    final uiNotifier = ref.read(loginUiProvider.notifier);
+
+    uiNotifier.setLoading(true);
+
+    try {
+      await ref.read(authServiceProvider).recuperarPassword(email);
+
+      _mostrarMensaje(
+        'Se solicitó el envío del enlace. '
+        'Revisa tu bandeja de entrada y spam.',
+      );
+    } on FirebaseAuthException catch (e) {
+      _mostrarMensaje(
+        'No se pudo enviar el correo: ${e.message ?? e.code}',
+        esError: true,
+      );
+    } catch (e) {
+      _mostrarMensaje('Error al recuperar contraseña: $e', esError: true);
+    } finally {
+      if (mounted) {
+        uiNotifier.setLoading(false);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -69,7 +108,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   // RECUPERAR CONTRASEÑA
-
 
   Future<String?> _mostrarOpcionesCuentaExistente() {
     return showDialog<String>(
@@ -273,7 +311,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         : null,
                   ),
 
-                  
+                  if (!uiState.isRegisterMode)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: uiState.isLoading
+                            ? null
+                            : _recuperarPassword,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 4,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('¿Olvidaste tu contraseña?'),
+                      ),
+                    ),
 
                   const SizedBox(height: 12),
 
@@ -451,6 +506,55 @@ class _DialogoCredenciales extends StatefulWidget {
 
   @override
   State<_DialogoCredenciales> createState() => _DialogoCredencialesState();
+}
+
+class _DialogoRecuperarPassword extends StatefulWidget {
+  const _DialogoRecuperarPassword();
+
+  @override
+  State<_DialogoRecuperarPassword> createState() =>
+      _DialogoRecuperarPasswordState();
+}
+
+class _DialogoRecuperarPasswordState extends State<_DialogoRecuperarPassword> {
+  final TextEditingController _emailCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    super.dispose();
+  }
+
+  void _enviar() {
+    final email = _emailCtrl.text.trim();
+
+    Navigator.pop(context, email);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Recuperar contraseña'),
+      content: TextField(
+        controller: _emailCtrl,
+        keyboardType: TextInputType.emailAddress,
+        autofocus: true,
+        decoration: const InputDecoration(
+          labelText: 'Correo electrónico',
+          prefixIcon: Icon(Icons.email_outlined),
+          border: OutlineInputBorder(),
+        ),
+        onSubmitted: (_) => _enviar(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(onPressed: _enviar, child: const Text('Enviar enlace')),
+      ],
+    );
+  }
 }
 
 class _DialogoCredencialesState extends State<_DialogoCredenciales> {

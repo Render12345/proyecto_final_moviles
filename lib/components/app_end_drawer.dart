@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:proyecto_final_moviles/screens/campus_map_screen.dart';
 
 import '../components/cached_storage_image.dart';
 import '../models/user_model.dart';
@@ -60,17 +61,11 @@ class AppEndDrawer extends ConsumerWidget {
             // Información del usuario.
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 28,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
               color: Theme.of(context).colorScheme.primaryContainer,
               child: Column(
                 children: [
-                  CachedProfileAvatar(
-                    ruta: perfilActual.fotoUrl,
-                    radius: 42,
-                  ),
+                  CachedProfileAvatar(ruta: perfilActual.fotoUrl, radius: 42),
                   const SizedBox(height: 12),
                   Text(
                     perfilActual.nombre.isEmpty
@@ -96,9 +91,7 @@ class AppEndDrawer extends ConsumerWidget {
                           : Icons.person,
                       size: 18,
                     ),
-                    label: Text(
-                      esAdministrador ? 'Administrador' : 'Usuario',
-                    ),
+                    label: Text(esAdministrador ? 'Administrador' : 'Usuario'),
                   ),
                   if (!esAdministrador && !perfilActual.autorizado) ...[
                     const SizedBox(height: 4),
@@ -174,9 +167,7 @@ class AppEndDrawer extends ConsumerWidget {
                       ListTile(
                         leading: const Icon(Icons.meeting_room_outlined),
                         title: const Text('Administrar aulas'),
-                        subtitle: const Text(
-                          'Gestionar salones y fotografías',
-                        ),
+                        subtitle: const Text('Gestionar salones y fotografías'),
                         onTap: () {
                           Navigator.pop(context);
                           Navigator.push(
@@ -198,9 +189,7 @@ class AppEndDrawer extends ConsumerWidget {
                       ListTile(
                         leading: const Icon(Icons.qr_code_scanner),
                         title: const Text('Escanear dispositivo'),
-                        subtitle: const Text(
-                          'Leer el código QR de un equipo',
-                        ),
+                        subtitle: const Text('Leer el código QR de un equipo'),
                         onTap: () {
                           Navigator.pop(context);
                           Navigator.push(
@@ -236,9 +225,7 @@ class AppEndDrawer extends ConsumerWidget {
                       ListTile(
                         leading: const Icon(Icons.card_membership_outlined),
                         title: const Text('Planes y suscripciones'),
-                        subtitle: const Text(
-                          'Consultar y administrar tu plan',
-                        ),
+                        subtitle: const Text('Consultar y administrar tu plan'),
                         onTap: () {
                           Navigator.pop(context);
                           Navigator.push(
@@ -246,6 +233,20 @@ class AppEndDrawer extends ConsumerWidget {
                             MaterialPageRoute(
                               builder: (_) =>
                                   SubscriptionScreen(userData: perfilActual),
+                            ),
+                          );
+                        },
+                      ),
+
+                      ListTile(
+                        leading: const Icon(Icons.map_outlined),
+                        title: const Text('Mapa del campus'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const CampusMapScreen(),
                             ),
                           );
                         },

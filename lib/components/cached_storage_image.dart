@@ -1,17 +1,14 @@
-
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import '../services/storage_service.dart';
 
-/// Tipo de fotografía que se desea recuperar de la caché.
 enum CachedImageType {
   perfil,
   salon,
 }
 
-/// Componente reutilizable para mostrar imágenes guardadas localmente.
 class CachedStorageImage extends StatefulWidget {
   final String ruta;
   final CachedImageType tipo;
@@ -39,7 +36,9 @@ class CachedStorageImage extends StatefulWidget {
 class _CachedStorageImageState extends State<CachedStorageImage> {
   final StorageService _storage = StorageService();
 
-  late Future<File> _imagenFuture;
+  Future<File>? _imagenFuture;
+
+  bool get _tieneRuta => widget.ruta.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -58,21 +57,23 @@ class _CachedStorageImageState extends State<CachedStorageImage> {
   }
 
   Future<File> _obtenerImagen() {
-    if (widget.ruta.startsWith('http://') ||
-        widget.ruta.startsWith('https://')) {
+    final ruta = widget.ruta.trim();
+
+    if (ruta.startsWith('http://') ||
+        ruta.startsWith('https://')) {
       return _storage.obtenerArchivoDesdeUrl(
-        widget.ruta,
-        identificador: widget.ruta,
+        ruta,
+        identificador: ruta,
       );
     }
 
     return widget.tipo == CachedImageType.perfil
-        ? _storage.obtenerArchivoImagen(widget.ruta)
-        : _storage.obtenerArchivoFotoSalon(widget.ruta);
+        ? _storage.obtenerArchivoImagen(ruta)
+        : _storage.obtenerArchivoFotoSalon(ruta);
   }
 
   void _cargarImagen() {
-    _imagenFuture = _obtenerImagen();
+    _imagenFuture = _tieneRuta ? _obtenerImagen() : null;
   }
 
   Widget _imagenPredeterminada(BuildContext context) {
@@ -92,6 +93,10 @@ class _CachedStorageImageState extends State<CachedStorageImage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_tieneRuta) {
+      return _imagenPredeterminada(context);
+    }
+
     return FutureBuilder<File>(
       future: _imagenFuture,
       builder: (context, snapshot) {
@@ -124,8 +129,6 @@ class _CachedStorageImageState extends State<CachedStorageImage> {
   }
 }
 
-/// Componente para mostrar fotografías de perfil en un CircleAvatar.
-/// Admite rutas de Supabase y URL externas de Google o GitHub.
 class CachedProfileAvatar extends StatefulWidget {
   final String ruta;
   final double radius;
@@ -137,13 +140,16 @@ class CachedProfileAvatar extends StatefulWidget {
   });
 
   @override
-  State<CachedProfileAvatar> createState() => _CachedProfileAvatarState();
+  State<CachedProfileAvatar> createState() =>
+      _CachedProfileAvatarState();
 }
 
 class _CachedProfileAvatarState extends State<CachedProfileAvatar> {
   final StorageService _storage = StorageService();
 
-  late Future<File> _imagenFuture;
+  Future<File>? _imagenFuture;
+
+  bool get _tieneRuta => widget.ruta.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -161,24 +167,26 @@ class _CachedProfileAvatarState extends State<CachedProfileAvatar> {
   }
 
   Future<File> _obtenerImagen() {
-    if (widget.ruta.startsWith('http://') ||
-        widget.ruta.startsWith('https://')) {
+    final ruta = widget.ruta.trim();
+
+    if (ruta.startsWith('http://') ||
+        ruta.startsWith('https://')) {
       return _storage.obtenerArchivoDesdeUrl(
-        widget.ruta,
-        identificador: widget.ruta,
+        ruta,
+        identificador: ruta,
       );
     }
 
-    return _storage.obtenerArchivoImagen(widget.ruta);
+    return _storage.obtenerArchivoImagen(ruta);
   }
 
   void _cargarImagen() {
-    _imagenFuture = _obtenerImagen();
+    _imagenFuture = _tieneRuta ? _obtenerImagen() : null;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.ruta.isEmpty) {
+    if (!_tieneRuta) {
       return CircleAvatar(
         radius: widget.radius,
         child: Icon(

@@ -1,5 +1,3 @@
-import 'providers/theme_provider.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -7,31 +5,42 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
+import 'providers/theme_provider.dart';
+import 'providers/onboarding_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'services/navigation_service.dart';
 import 'services/notification_service.dart';
 
 @pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+Future<void> firebaseMessagingBackgroundHandler(
+  RemoteMessage message,
+) async {
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-  debugPrint('Notificación recibida en segundo plano: ${message.messageId}');
+  debugPrint(
+    'Notificación recibida en segundo plano: ${message.messageId}',
+  );
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  FirebaseMessaging.onBackgroundMessage(
+    firebaseMessagingBackgroundHandler,
+  );
 
   await NotificationService.initialize();
 
   runApp(const ProviderScope(child: MyApp()));
 
-  // Procesar una notificación que abrió la aplicación
-  // cuando ya exista un navegador disponible.
   WidgetsBinding.instance.addPostFrameCallback((_) {
     NotificationService.procesarNotificacionPendiente();
   });
@@ -59,7 +68,56 @@ class MyApp extends ConsumerWidget {
         brightness: Brightness.dark,
       ),
       themeMode: temaSeleccionado,
-      home: const AuthGate(),
+      home: const OnboardingGate(),
+    );
+  }
+}
+
+class OnboardingGate extends ConsumerWidget {
+  const OnboardingGate({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final onboarding = ref.watch(onboardingCompletedProvider);
+
+    return onboarding.when(
+      loading: () => const _PantallaCarga(),
+      error: (error, stackTrace) => Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  color: Colors.red,
+                  size: 48,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No se pudo cargar la configuración inicial.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () {
+                    ref.invalidate(onboardingCompletedProvider);
+                  },
+                  child: const Text('Reintentar'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      data: (completado) {
+        if (!completado) {
+          return const OnboardingScreen();
+        }
+
+        return const AuthGate();
+      },
     );
   }
 }
@@ -73,8 +131,9 @@ class AuthGate extends ConsumerWidget {
 
     return authState.when(
       loading: () => const _PantallaCarga(),
-      error: (error, stackTrace) =>
-          _PantallaError(mensaje: 'Error al verificar la sesión: $error'),
+      error: (error, stackTrace) => _PantallaError(
+        mensaje: 'Error al verificar la sesión: $error',
+      ),
       data: (authUser) {
         if (authUser == null) {
           return const LoginScreen();
@@ -99,14 +158,20 @@ class _PantallaCarga extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
   }
 }
 
 class _PantallaError extends StatelessWidget {
   final String mensaje;
 
-  const _PantallaError({required this.mensaje});
+  const _PantallaError({
+    required this.mensaje,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -117,9 +182,16 @@ class _PantallaError extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 56),
+              const Icon(
+                Icons.error_outline,
+                color: Colors.red,
+                size: 56,
+              ),
               const SizedBox(height: 16),
-              Text(mensaje, textAlign: TextAlign.center),
+              Text(
+                mensaje,
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
         ),
