@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auth_provider.dart';
+import '../services/biometric_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -16,6 +17,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _nombreCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+
+  // HUELLA: true si hay sensor, huella registrada y credenciales guardadas
+  bool _huellaLista = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _revisarHuella();
+  }
+
+  Future<void> _revisarHuella() async {
+    final listo =
+        await BiometricService.disponible() &&
+        await BiometricService.tieneCredenciales();
+
+    if (mounted) setState(() => _huellaLista = listo);
+  }
 
   Future<void> _recuperarPassword() async {
     final email = await showDialog<String>(
@@ -78,6 +96,91 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
+  // ============================================================
+  // HUELLA DACTILAR (opción adicional, no reemplaza ningún método)
+  // ============================================================
+
+  /// Devuelve true si después de iniciar sesión se deben guardar las
+  /// credenciales para la huella.
+  Future<bool> _preguntarActivarHuella() async {
+    if (!await BiometricService.disponible()) return false;
+
+    // Si ya hay huella activa, solo se actualizan las credenciales guardadas
+    if (await BiometricService.tieneCredenciales()) return true;
+
+    if (await BiometricService.rechazado()) return false;
+    if (!mounted) return false;
+
+    final activar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.fingerprint, size: 48),
+        title: const Text('¿Activar acceso con huella?'),
+        content: const Text(
+          'La próxima vez podrás entrar con tu huella sin escribir '
+          'tu contraseña.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Ahora no'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Activar'),
+          ),
+        ],
+      ),
+    );
+
+    if (activar != true) await BiometricService.marcarRechazado();
+
+    return activar == true;
+  }
+
+  Future<void> _loginConHuella() async {
+    final uiNotifier = ref.read(loginUiProvider.notifier);
+    final authService = ref.read(authServiceProvider);
+
+    if (!await BiometricService.autenticar()) return;
+
+    final cred = await BiometricService.obtenerCredenciales();
+
+    if (cred == null) {
+      if (mounted) setState(() => _huellaLista = false);
+      return;
+    }
+
+    uiNotifier.setLoading(true);
+
+    try {
+      await authService.loginConCorreo(cred.email, cred.password);
+    } on FirebaseAuthException catch (e) {
+      const credencialesInvalidas = {
+        'invalid-credential',
+        'wrong-password',
+        'user-not-found',
+      };
+
+      if (credencialesInvalidas.contains(e.code)) {
+        await BiometricService.borrar();
+        if (mounted) setState(() => _huellaLista = false);
+
+        _mostrarMensaje(
+          'Tu contraseña cambió. Inicia sesión con tu correo y vuelve a '
+          'activar la huella.',
+          esError: true,
+        );
+      } else {
+        _mostrarMensaje('Error: ${e.message ?? e.code}', esError: true);
+      }
+    } catch (e) {
+      _mostrarMensaje('Error: $e', esError: true);
+    } finally {
+      uiNotifier.setLoading(false);
+    }
+  }
+
   // INICIO DE SESIÓN CON CORREO
   Future<void> _submitCorreo() async {
     if (!_formKey.currentState!.validate()) return;
@@ -98,7 +201,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
         _mostrarMensaje('Cuenta creada. Revisa tu correo para verificarla.');
       } else {
-        await authService.loginConCorreo(_emailCtrl.text, _passCtrl.text);
+        // Se capturan antes del await: al iniciar sesión esta pantalla
+        // se destruye y los controladores dejan de ser válidos.
+        final email = _emailCtrl.text.trim();
+        final password = _passCtrl.text.trim();
+
+        final guardarHuella = await _preguntarActivarHuella();
+
+        await authService.loginConCorreo(email, password);
+
+        if (guardarHuella) {
+          await BiometricService.guardarCredenciales(email, password);
+        }
       }
     } catch (e) {
       _mostrarMensaje('Error: $e', esError: true);
@@ -352,6 +466,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 : 'Iniciar Sesión',
                           ),
                   ),
+
+                  // HUELLA: opción adicional, solo aparece si ya fue activada
+                  if (_huellaLista && !uiState.isRegisterMode) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: uiState.isLoading ? null : _loginConHuella,
+                      icon: const Icon(Icons.fingerprint),
+                      label: const Text('Entrar con huella'),
+                    ),
+                  ],
 
                   TextButton(
                     onPressed: () {
