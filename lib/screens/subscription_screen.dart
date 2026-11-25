@@ -1,12 +1,14 @@
-import 'dart:math';
+import 'dart:async';
 
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../config/mercadopago_config.dart';
 import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
+import '../services/mercadopago_service.dart';
 
 class SubscriptionScreen extends ConsumerStatefulWidget {
   final UserModel userData;
@@ -17,19 +19,20 @@ class SubscriptionScreen extends ConsumerStatefulWidget {
   ConsumerState<SubscriptionScreen> createState() => _SubscriptionScreenState();
 }
 
-class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
-  final _formKey = GlobalKey<FormState>();
-
-  final _titularController = TextEditingController();
-  final _numeroController = TextEditingController();
-  final _vencimientoController = TextEditingController();
-  final _cvvController = TextEditingController();
-
+class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen>
+    with WidgetsBindingObserver {
   String _planSeleccionado = 'profesional';
   String _modalidadSeleccionada = 'mensual';
 
-  bool _procesando = false;
-  bool _mostrarCvv = false;
+  bool _procesando = false; // creando la preferencia
+  bool _verificando = false; // candado: evita activar dos veces
+
+  // Pago en curso (el usuario está en MercadoPago)
+  String? _pagoIdEspera;
+  Map<String, dynamic>? _txEspera;
+  String? _initPoint;
+  String? _estadoMp;
+  Timer? _timer;
 
   final List<Map<String, dynamic>> _planes = [
     {
@@ -59,241 +62,346 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _recuperarPendientes();
+  }
+
+  @override
   void dispose() {
-    _titularController.dispose();
-    _numeroController.dispose();
-    _vencimientoController.dispose();
-    _cvvController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
     super.dispose();
   }
 
-  Map<String, dynamic> get _planActual {
-    return _planes.firstWhere((plan) => plan['id'] == _planSeleccionado);
+  // Al volver de MercadoPago a la app, revisamos de inmediato.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _verificarEspera();
   }
 
-  int get _precio {
-    return _modalidadSeleccionada == 'mensual'
-        ? _planActual['mensual'] as int
-        : _planActual['anual'] as int;
-  }
+  Map<String, dynamic> get _planActual =>
+      _planes.firstWhere((plan) => plan['id'] == _planSeleccionado);
+
+  int get _precio => _modalidadSeleccionada == 'mensual'
+      ? _planActual['mensual'] as int
+      : _planActual['anual'] as int;
 
   String get _nombrePlan => _planActual['nombre'] as String;
 
   String get _uid => widget.userData.uid;
 
-  String get _ultimosDigitos {
-    final numero = _numeroController.text.replaceAll(' ', '');
-    if (numero.length < 4) return '----';
-    return numero.substring(numero.length - 4);
-  }
+  bool get _esperandoPago => _pagoIdEspera != null;
+  bool get _bloqueado => _procesando || _esperandoPago;
 
-  String? _validarNumero(String? value) {
-    final numero = (value ?? '').replaceAll(' ', '');
+  DatabaseReference get _userRef =>
+      FirebaseDatabase.instance.ref('users/$_uid');
 
-    if (numero.isEmpty) {
-      return 'Introduce el número de tarjeta';
-    }
-
-    if (!RegExp(r'^\d{16}$').hasMatch(numero)) {
-      return 'La tarjeta debe tener 16 dígitos';
-    }
-
-    return null;
-  }
-
-  String? _validarVencimiento(String? value) {
-    final texto = (value ?? '').trim();
-
-    if (!RegExp(r'^(0[1-9]|1[0-2])\/\d{2}$').hasMatch(texto)) {
-      return 'Usa el formato MM/AA';
-    }
-
-    final partes = texto.split('/');
-    final mes = int.parse(partes[0]);
-    final anio = 2000 + int.parse(partes[1]);
-
-    final ahora = DateTime.now();
-    final vencimiento = DateTime(anio, mes + 1, 0);
-
-    if (vencimiento.isBefore(DateTime(ahora.year, ahora.month, 1))) {
-      return 'La tarjeta está vencida';
-    }
-
-    return null;
-  }
-
-  String? _validarCvv(String? value) {
-    if (value == null || !RegExp(r'^\d{3,4}$').hasMatch(value)) {
-      return 'Introduce un CVV de 3 o 4 dígitos';
-    }
-
-    return null;
-  }
-
+  // ============================================================
+  // PLAN GRATUITO
+  // ============================================================
   Future<void> _activarPlanGratuito() async {
     setState(() => _procesando = true);
 
     try {
       final ahora = DateTime.now();
-      final fechaFin = ahora.add(const Duration(days: 365));
 
-      await FirebaseDatabase.instance.ref('users/$_uid').update({
+      // No pisar un plan de pago que siga vigente
+      final susSnap = await _userRef.child('suscripcion').get();
+      if (susSnap.exists && susSnap.value is Map) {
+        final sus = Map<String, dynamic>.from(susSnap.value as Map);
+        final fin = DateTime.tryParse(sus['fecha_fin']?.toString() ?? '');
+        final precio = (sus['precio'] as num?) ?? 0;
+        if (sus['estado'] == 'activa' &&
+            precio > 0 &&
+            fin != null &&
+            fin.isAfter(ahora)) {
+          if (mounted) _mostrarError('Ya tienes un plan de pago activo.');
+          return;
+        }
+      }
+
+      await _userRef.update({
         'plan_suscripcion': _planSeleccionado,
         'suscripcion': {
           'nombre_plan': _nombrePlan,
           'modalidad': 'gratuita',
-          'precio_simulado': 0,
+          'precio': 0,
           'moneda': 'MXN',
           'estado': 'activa',
           'fecha_inicio': ahora.toIso8601String(),
-          'fecha_fin': fechaFin.toIso8601String(),
-          'simulada': true,
+          'fecha_fin':
+              DateTime(ahora.year + 1, ahora.month, ahora.day).toIso8601String(),
           'metodo_pago': 'sin_costo',
         },
       });
 
-      ref.invalidate(currentUserDataProvider);
-
       if (!mounted) return;
-
       _mostrarResultado(
         aprobado: true,
+        titulo: 'Plan activado',
         mensaje: 'Tu plan gratuito está activo.',
       );
     } catch (e) {
       if (!mounted) return;
       _mostrarError('No se pudo activar el plan: $e');
     } finally {
-      if (mounted) {
-        setState(() => _procesando = false);
-      }
+      if (mounted) setState(() => _procesando = false);
     }
   }
 
+  // ============================================================
+  // INICIAR PAGO
+  // ============================================================
   Future<void> _procesarPago() async {
-    if (_procesando) return;
+    if (_bloqueado) return;
 
-    // Primero comprobamos si el plan es gratuito.
-    // No necesita validar un formulario de tarjeta.
     if (_precio <= 0) {
       await _activarPlanGratuito();
       return;
     }
 
-    // Validamos la tarjeta solamente para planes de pago.
-    final formState = _formKey.currentState;
-
-    if (formState == null || !formState.validate()) {
+    if (!MercadoPagoConfig.configurado) {
+      _mostrarError('Falta configurar el Access Token de prueba.');
       return;
     }
-
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirmar pago simulado'),
-        content: Text(
-          'Se realizará una simulación de pago por '
-          '\$$_precio MXN para el plan $_nombrePlan '
-          'con modalidad $_modalidadSeleccionada.\n\n'
-          'No se realizará ningún cobro real.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Simular pago'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar != true || !mounted) return;
 
     setState(() => _procesando = true);
 
     try {
-      final aprobado = Random().nextInt(2) == 0;
+      final pagoRef = _userRef.child('transacciones').push();
+      final pagoId = pagoRef.key!;
 
-      final ahora = DateTime.now();
-
-      final fechaFin = _modalidadSeleccionada == 'mensual'
-          ? DateTime(ahora.year, ahora.month + 1, ahora.day)
-          : DateTime(ahora.year + 1, ahora.month, ahora.day);
-
-      final transaccionRef = FirebaseDatabase.instance
-          .ref('users/$_uid/transacciones')
-          .push();
-
-      final transaccionId = transaccionRef.key;
-
-      if (transaccionId == null) {
-        throw Exception('No se pudo generar el registro de transacción.');
-      }
-
-      final transaccion = {
-        'id': transaccionId,
+      final tx = <String, dynamic>{
+        'id': pagoId,
         'plan': _planSeleccionado,
         'nombre_plan': _nombrePlan,
         'modalidad': _modalidadSeleccionada,
         'importe': _precio,
         'moneda': 'MXN',
-        'resultado': aprobado ? 'completado' : 'saldo_insuficiente',
-        'mensaje': aprobado ? 'Pago simulado completado' : 'Saldo insuficiente',
-        'metodo_pago': 'tarjeta_virtual_demo',
-        'ultimos_digitos': _ultimosDigitos,
-        'fecha': ahora.toIso8601String(),
-        'simulado': true,
+        'estado': 'pendiente',
+        'metodo_pago': 'mercadopago',
+        'fecha': DateTime.now().toIso8601String(),
       };
 
-      final updates = <String, dynamic>{
-        'users/$_uid/transacciones/$transaccionId': transaccion,
-      };
-
-      if (aprobado) {
-        updates['users/$_uid/plan_suscripcion'] = _planSeleccionado;
-
-        updates['users/$_uid/suscripcion'] = {
-          'nombre_plan': _nombrePlan,
-          'modalidad': _modalidadSeleccionada,
-          'precio_simulado': _precio,
-          'moneda': 'MXN',
-          'estado': 'activa',
-          'fecha_inicio': ahora.toIso8601String(),
-          'fecha_fin': fechaFin.toIso8601String(),
-          'simulada': true,
-          'metodo_pago': 'tarjeta_virtual_demo',
-          'pago_aprobado': true,
-        };
-      }
-
-      await FirebaseDatabase.instance.ref().update(updates);
-
-      if (aprobado) {
-        ref.invalidate(currentUserDataProvider);
-      }
-
-      if (!mounted) return;
-
-      _mostrarResultado(
-        aprobado: aprobado,
-        mensaje: aprobado
-            ? '¡Pago completado! Tu suscripción $_nombrePlan está activa.'
-            : 'No se pudo completar el pago porque la tarjeta no tiene saldo suficiente.',
+      final pref = await MercadoPagoService.crearPreferencia(
+        plan: _planSeleccionado,
+        titulo: 'Suscripción $_nombrePlan ($_modalidadSeleccionada)',
+        importe: _precio,
+        externalReference: '$_uid:$pagoId',
       );
+
+      await pagoRef.set({...tx, 'preference_id': pref.id});
+
+      _iniciarEspera(pagoId, tx, pref.initPoint);
+
+      final abierto = await launchUrl(
+        Uri.parse(pref.initPoint),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!abierto) {
+        _detenerEspera();
+        if (mounted) _mostrarError('No se pudo abrir MercadoPago.');
+      }
     } catch (e) {
       if (!mounted) return;
-      _mostrarError('Ocurrió un error al procesar el pago: $e');
+      _mostrarError('No se pudo iniciar el pago: $e');
     } finally {
-      if (mounted) {
-        setState(() => _procesando = false);
-      }
+      if (mounted) setState(() => _procesando = false);
     }
   }
 
-  void _mostrarResultado({required bool aprobado, required String mensaje}) {
+  // ============================================================
+  // ESPERA Y VERIFICACIÓN (sin webhook: la app consulta a MercadoPago)
+  // ============================================================
+  void _iniciarEspera(String pagoId, Map<String, dynamic> tx, String url) {
+    _timer?.cancel();
+    setState(() {
+      _pagoIdEspera = pagoId;
+      _txEspera = tx;
+      _initPoint = url;
+      _estadoMp = null;
+    });
+    _timer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _verificarEspera(),
+    );
+  }
+
+  void _detenerEspera() {
+    _timer?.cancel();
+    _timer = null;
+    if (!mounted) return;
+    setState(() {
+      _pagoIdEspera = null;
+      _txEspera = null;
+      _initPoint = null;
+      _estadoMp = null;
+    });
+  }
+
+  Future<void> _reabrirPago() async {
+    final url = _initPoint;
+    if (url == null) return;
+    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _verificarEspera({bool manual = false}) async {
+    final id = _pagoIdEspera;
+    final tx = _txEspera;
+    if (id == null || tx == null) return;
+
+    try {
+      final status = await _verificarTransaccion(id, tx);
+      if (!mounted || _pagoIdEspera != id) return;
+
+      if (status == 'approved') {
+        _detenerEspera();
+        _mostrarResultado(
+          aprobado: true,
+          titulo: 'Pago completado',
+          mensaje:
+              '¡Pago completado! Tu suscripción ${tx['nombre_plan']} está activa.',
+        );
+      } else if (status == 'monto_invalido') {
+        _detenerEspera();
+        _mostrarResultado(
+          aprobado: false,
+          titulo: 'Pago no válido',
+          mensaje: 'El monto del pago no coincide con el plan seleccionado.',
+        );
+      } else if (status != null) {
+        setState(() => _estadoMp = status);
+      } else if (manual) {
+        _mostrarError('Aún no hay un pago registrado en MercadoPago.');
+      }
+    } catch (e) {
+      if (manual && mounted) _mostrarError('No se pudo verificar: $e');
+    }
+  }
+
+  /// Consulta MercadoPago y, si el pago está aprobado y el monto coincide,
+  /// activa la suscripción. Devuelve el status de MP, 'monto_invalido' o null.
+  Future<String?> _verificarTransaccion(
+    String pagoId,
+    Map<String, dynamic> tx,
+  ) async {
+    if (_verificando) return null;
+    _verificando = true;
+
+    try {
+      final pago = await MercadoPagoService.buscarPago('$_uid:$pagoId');
+      if (pago == null) return null;
+
+      final status = pago['status']?.toString();
+      if (status != 'approved') return status;
+
+      final monto = (pago['transaction_amount'] as num?)?.toDouble();
+      final esperado = (tx['importe'] as num).toDouble();
+      if (monto != esperado || pago['currency_id'] != tx['moneda']) {
+        await _userRef
+            .child('transacciones/$pagoId/estado')
+            .set('monto_invalido');
+        return 'monto_invalido';
+      }
+
+      await _activarSuscripcion(pagoId, tx, pago);
+      return 'approved';
+    } finally {
+      _verificando = false;
+    }
+  }
+
+  Future<void> _activarSuscripcion(
+    String pagoId,
+    Map<String, dynamic> tx,
+    Map<String, dynamic> pago,
+  ) async {
+    final ahora = DateTime.now();
+
+    // Renovación del mismo plan vigente: se suma al final del periodo actual
+    DateTime base = ahora;
+    String? inicioPrevio;
+
+    final susSnap = await _userRef.child('suscripcion').get();
+    final planSnap = await _userRef.child('plan_suscripcion').get();
+
+    if (susSnap.exists && susSnap.value is Map) {
+      final sus = Map<String, dynamic>.from(susSnap.value as Map);
+      final finActual = DateTime.tryParse(sus['fecha_fin']?.toString() ?? '');
+      if (sus['estado'] == 'activa' &&
+          planSnap.value == tx['plan'] &&
+          finActual != null &&
+          finActual.isAfter(ahora)) {
+        base = finActual;
+        inicioPrevio = sus['fecha_inicio']?.toString();
+      }
+    }
+
+    final fin = tx['modalidad'] == 'mensual'
+        ? DateTime(base.year, base.month + 1, base.day)
+        : DateTime(base.year + 1, base.month, base.day);
+
+    await _userRef.update({
+      'transacciones/$pagoId/estado': 'aprobado',
+      'transacciones/$pagoId/mp_payment_id': pago['id'].toString(),
+      'transacciones/$pagoId/mp_status': 'approved',
+      'transacciones/$pagoId/fecha_aprobacion': ahora.toIso8601String(),
+      'plan_suscripcion': tx['plan'],
+      'suscripcion': {
+        'nombre_plan': tx['nombre_plan'],
+        'modalidad': tx['modalidad'],
+        'precio': tx['importe'],
+        'moneda': tx['moneda'],
+        'estado': 'activa',
+        'fecha_inicio': inicioPrevio ?? ahora.toIso8601String(),
+        'fecha_fin': fin.toIso8601String(),
+        'metodo_pago': 'mercadopago',
+        'pago_id': pagoId,
+      },
+    });
+  }
+
+  // Si el usuario cerró la app antes de que se verificara un pago,
+  // al abrir esta pantalla revisamos las transacciones pendientes.
+  Future<void> _recuperarPendientes() async {
+    if (!MercadoPagoConfig.configurado) return;
+
+    try {
+      final snap = await _userRef.child('transacciones').get();
+      if (!snap.exists || snap.value is! Map) return;
+
+      final todas = Map<dynamic, dynamic>.from(snap.value as Map);
+      for (final e in todas.entries) {
+        if (e.value is! Map) continue;
+        final tx = Map<String, dynamic>.from(e.value as Map);
+        if (tx['estado'] != 'pendiente') continue;
+
+        final status = await _verificarTransaccion(e.key.toString(), tx);
+        if (status == 'approved' && mounted) {
+          _mostrarResultado(
+            aprobado: true,
+            titulo: 'Pago confirmado',
+            mensaje:
+                'Detectamos un pago aprobado. Tu suscripción ${tx['nombre_plan']} ya está activa.',
+          );
+          break;
+        }
+      }
+    } catch (_) {
+      // Silencioso: es solo una comprobación de cortesía
+    }
+  }
+
+  // ============================================================
+  // DIÁLOGOS
+  // ============================================================
+  void _mostrarResultado({
+    required bool aprobado,
+    required String titulo,
+    required String mensaje,
+  }) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -303,20 +411,13 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
           color: aprobado ? Colors.green : Colors.red,
           size: 55,
         ),
-        title: Text(aprobado ? 'Pago completado' : 'Pago rechazado'),
-        content: Text(
-          '$mensaje\n\n'
-          'Este resultado corresponde a una simulación académica. '
-          'No se realizó ningún cobro real.',
-          textAlign: TextAlign.center,
-        ),
+        title: Text(titulo),
+        content: Text(mensaje, textAlign: TextAlign.center),
         actions: [
           FilledButton(
             onPressed: () {
               Navigator.pop(dialogContext);
-              if (aprobado && mounted) {
-                Navigator.pop(context);
-              }
+              if (aprobado && mounted) Navigator.pop(context);
             },
             child: const Text('Aceptar'),
           ),
@@ -331,6 +432,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     );
   }
 
+  // ============================================================
+  // WIDGETS
+  // ============================================================
   Widget _construirPlan(Map<String, dynamic> plan) {
     final seleccionado = _planSeleccionado == plan['id'];
     final precio = _modalidadSeleccionada == 'mensual'
@@ -350,13 +454,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: _procesando
+        onTap: _bloqueado
             ? null
-            : () {
-                setState(() {
-                  _planSeleccionado = plan['id'] as String;
-                });
-              },
+            : () => setState(() => _planSeleccionado = plan['id'] as String),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -396,13 +496,11 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               Radio<String>(
                 value: plan['id'] as String,
                 groupValue: _planSeleccionado,
-                onChanged: _procesando
+                onChanged: _bloqueado
                     ? null
                     : (value) {
                         if (value != null) {
-                          setState(() {
-                            _planSeleccionado = value;
-                          });
+                          setState(() => _planSeleccionado = value);
                         }
                       },
               ),
@@ -413,210 +511,95 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     );
   }
 
-  Widget _construirCampo({
-    required String etiqueta,
-    required TextEditingController controller,
-    required String? Function(String?) validator,
-    TextInputType keyboardType = TextInputType.text,
-    List<TextInputFormatter>? inputFormatters,
-    String? hint,
-    Widget? suffixIcon,
-    bool obscureText = false,
-    TextCapitalization textCapitalization = TextCapitalization.none,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 15),
-      child: TextFormField(
-        controller: controller,
-        validator: validator,
-        keyboardType: keyboardType,
-        inputFormatters: inputFormatters,
-        obscureText: obscureText,
-        textCapitalization: textCapitalization,
-        enabled: !_procesando,
-        decoration: InputDecoration(
-          labelText: etiqueta,
-          hintText: hint,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          suffixIcon: suffixIcon,
+  Widget _construirAvisoMercadoPago() {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: const Padding(
+        padding: EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.lock_outline, color: Colors.green),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Serás redirigido a MercadoPago para pagar. '
+                'La app nunca ve ni guarda los datos de tu tarjeta. '
+                'Modo de pruebas: no se realizan cobros reales.',
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _construirFormularioTarjeta() {
+  String? get _textoEstadoMp {
+    switch (_estadoMp) {
+      case 'rejected':
+      case 'cancelled':
+        return 'El último intento fue rechazado. Puedes reintentar en MercadoPago.';
+      case 'pending':
+      case 'in_process':
+        return 'Tu pago está en proceso en MercadoPago.';
+      default:
+        return null;
+    }
+  }
+
+  Widget _construirEsperaPago() {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.credit_card),
-                  SizedBox(width: 10),
-                  Text(
-                    'Datos de tarjeta de prueba',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Introduce datos ficticios. No utilices una tarjeta bancaria real.',
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF243B55), Color(0xFF141E30)],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'CONTROL AIRES ITC',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Icon(Icons.credit_card, color: Colors.white, size: 30),
-                      ],
-                    ),
-                    const SizedBox(height: 28),
-                    Text(
-                      _numeroController.text.isEmpty
-                          ? '•••• •••• •••• ••••'
-                          : _numeroController.text,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _titularController.text.isEmpty
-                                ? 'NOMBRE DEL TITULAR'
-                                : _titularController.text.toUpperCase(),
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          _vencimientoController.text.isEmpty
-                              ? 'MM/AA'
-                              : _vencimientoController.text,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 22),
-              _construirCampo(
-                etiqueta: 'Nombre del titular',
-                controller: _titularController,
-                hint: 'Ej. JUAN PEREZ',
-                textCapitalization: TextCapitalization.characters,
-                validator: (value) {
-                  if (value == null || value.trim().length < 3) {
-                    return 'Introduce el nombre del titular';
-                  }
-                  return null;
-                },
-              ),
-              _construirCampo(
-                etiqueta: 'Número de tarjeta',
-                controller: _numeroController,
-                hint: '16 dígitos',
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(16),
-                  _SeparadorTarjetaFormatter(),
-                ],
-                validator: _validarNumero,
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: _construirCampo(
-                      etiqueta: 'Vencimiento',
-                      controller: _vencimientoController,
-                      hint: 'MM/AA',
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(4),
-                        _VencimientoFormatter(),
-                      ],
-                      validator: _validarVencimiento,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _construirCampo(
-                      etiqueta: 'CVV',
-                      controller: _cvvController,
-                      hint: '123',
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(4),
-                      ],
-                      obscureText: !_mostrarCvv,
-                      suffixIcon: IconButton(
-                        onPressed: () {
-                          setState(() {
-                            _mostrarCvv = !_mostrarCvv;
-                          });
-                        },
-                        icon: Icon(
-                          _mostrarCvv ? Icons.visibility_off : Icons.visibility,
-                        ),
-                      ),
-                      validator: _validarCvv,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              const Row(
-                children: [
-                  Icon(Icons.lock_outline, size: 16, color: Colors.green),
-                  SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      'Los datos de tarjeta no se almacenan. El pago es ficticio.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ),
-                ],
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            const Text(
+              'Esperando la confirmación de MercadoPago...',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Completa el pago y regresa a la app. Verificamos el pago '
+              'automáticamente cada pocos segundos.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (_textoEstadoMp != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _textoEstadoMp!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ],
-          ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: () => _verificarEspera(manual: true),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Ya pagué, verificar'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _reabrirPago,
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Abrir de nuevo'),
+                ),
+                TextButton(
+                  onPressed: _detenerEspera,
+                  child: const Text('Dejar de esperar'),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -692,19 +675,18 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   ),
                 ],
                 selected: {_modalidadSeleccionada},
-                onSelectionChanged: _procesando
+                onSelectionChanged: _bloqueado
                     ? null
                     : (selection) {
-                        setState(() {
-                          _modalidadSeleccionada = selection.first;
-                        });
+                        setState(() => _modalidadSeleccionada = selection.first);
                       },
               ),
               const SizedBox(height: 22),
-              if (_precio > 0) ...[
-                _construirFormularioTarjeta(),
-                const SizedBox(height: 18),
-              ],
+              if (_esperandoPago)
+                _construirEsperaPago()
+              else if (_precio > 0)
+                _construirAvisoMercadoPago(),
+              const SizedBox(height: 18),
               Card(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: Padding(
@@ -734,7 +716,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: _procesando ? null : _procesarPago,
+                  onPressed: _bloqueado ? null : _procesarPago,
                   icon: _procesando
                       ? const SizedBox(
                           width: 18,
@@ -746,8 +728,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     _procesando
                         ? 'Procesando...'
                         : _precio == 0
-                        ? 'Activar plan gratuito'
-                        : 'Pagar \$$_precio MXN',
+                            ? 'Activar plan gratuito'
+                            : 'Pagar \$$_precio MXN con MercadoPago',
                   ),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -757,7 +739,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               const SizedBox(height: 12),
               const Center(
                 child: Text(
-                  'CONTROL AIRES ITC · SIMULACIÓN ACADÉMICA',
+                  'CONTROL AIRES ITC · DEMOSTRACIÓN CON MERCADOPAGO',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 11, color: Colors.grey),
                 ),
@@ -766,61 +748,6 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SeparadorTarjetaFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final digits = newValue.text.replaceAll(' ', '');
-
-    final buffer = StringBuffer();
-
-    for (int i = 0; i < digits.length; i++) {
-      if (i > 0 && i % 4 == 0) {
-        buffer.write(' ');
-      }
-      buffer.write(digits[i]);
-    }
-
-    final texto = buffer.toString();
-
-    return TextEditingValue(
-      text: texto,
-      selection: TextSelection.collapsed(offset: texto.length),
-    );
-  }
-}
-
-
-class _VencimientoFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-
-    final limitedDigits = digits.length > 4
-        ? digits.substring(0, 4)
-        : digits;
-
-    String formatted = limitedDigits;
-
-    if (limitedDigits.length >= 2) {
-      formatted =
-          '${limitedDigits.substring(0, 2)}/${limitedDigits.substring(2)}';
-    }
-
-    return TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(
-        offset: formatted.length,
       ),
     );
   }
