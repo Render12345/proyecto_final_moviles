@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:proyecto_final_moviles/providers/typography_provider.dart';
 
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
@@ -12,6 +13,10 @@ import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/navigation_service.dart';
 import 'services/notification_service.dart';
+
+// Colores principales de Control Aires ITC.
+const Color colorVerdePrincipal = Color(0xFF087443);
+const Color colorAzulSecundario = Color(0xFF07549A);
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(
@@ -49,25 +54,40 @@ Future<void> main() async {
 class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
+  ThemeData _crearTema(
+  Brightness brightness,
+  AppTypography tipografia,
+) {
+  final esquema = ColorScheme.fromSeed(
+    seedColor: colorVerdePrincipal,
+    brightness: brightness,
+  ).copyWith(
+    primary: colorVerdePrincipal,
+    secondary: colorAzulSecundario,
+  );
+
+  return ThemeData(
+    useMaterial3: true,
+    brightness: brightness,
+    colorScheme: esquema,
+    fontFamily: tipografia.fontFamily,
+  );
+}
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final temaSeleccionado = ref.watch(themeModeProvider);
+    final tipografiaSeleccionada = ref.watch(typographyProvider);
 
     return MaterialApp(
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Control Aires ITC',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.blue,
-        brightness: Brightness.light,
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.blue,
-        brightness: Brightness.dark,
-      ),
+
+      theme: _crearTema(Brightness.light, tipografiaSeleccionada),
+      darkTheme: _crearTema(Brightness.dark,tipografiaSeleccionada),
       themeMode: temaSeleccionado,
+
       home: const OnboardingGate(),
     );
   }

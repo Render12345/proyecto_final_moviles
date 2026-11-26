@@ -12,11 +12,6 @@ import '../models/user_model.dart';
 import '../providers/device_provider.dart';
 import '../providers/salon_provider.dart';
 
-
-
-
-
-
 class DevicesScreen extends ConsumerWidget {
   final UserModel userData;
   final Future<void> Function() onLogout;
@@ -66,25 +61,16 @@ class DevicesScreen extends ConsumerWidget {
           ),
         ],
       ),
-      endDrawer: AppEndDrawer(
-        userData: userData,
-        onLogout: onLogout,
-      ),
+      endDrawer: AppEndDrawer(userData: userData, onLogout: onLogout),
       body: dispositivosAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(),
-        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.error_outline,
-                  color: Colors.red,
-                  size: 48,
-                ),
+                const Icon(Icons.error_outline, color: Colors.red, size: 48),
                 const SizedBox(height: 12),
                 const Text(
                   'No se pudieron cargar los dispositivos.',
@@ -92,10 +78,7 @@ class DevicesScreen extends ConsumerWidget {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  error.toString(),
-                  textAlign: TextAlign.center,
-                ),
+                Text(error.toString(), textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 ElevatedButton.icon(
                   onPressed: () {
@@ -116,11 +99,7 @@ class DevicesScreen extends ConsumerWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.devices_other,
-                      size: 80,
-                      color: Colors.grey,
-                    ),
+                    Icon(Icons.devices_other, size: 80, color: Colors.grey),
                     SizedBox(height: 16),
                     Text(
                       'No hay dispositivos registrados.',
@@ -141,31 +120,72 @@ class DevicesScreen extends ConsumerWidget {
               ref.invalidate(devicesProvider);
               ref.invalidate(salonesProvider);
             },
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _EncabezadoDispositivos(
-                  cantidad: dispositivos.length,
-                ),
-                const SizedBox(height: 16),
-                ...dispositivos.map((dispositivo) {
-                  SalonModel? salon;
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                const anchoMaximo = 1400.0;
+                const separacion = 16.0;
 
-                  for (final elemento in salones) {
-                    if (elemento.id == dispositivo.salonId) {
-                      salon = elemento;
-                      break;
-                    }
-                  }
+                final anchoDisponible = constraints.maxWidth.clamp(
+                  0.0,
+                  anchoMaximo,
+                );
 
-                  return _TarjetaDispositivo(
-                    dispositivo: dispositivo,
-                    salon: salon,
-                    salones: salones,
-                    esAdministrador: esAdministrador,
-                  );
-                }),
-              ],
+                final columnas = anchoDisponible >= 1100
+                    ? 3
+                    : anchoDisponible >= 650
+                    ? 2
+                    : 1;
+
+                final anchoContenido = anchoDisponible - 32;
+
+                final anchoTarjeta =
+                    (anchoContenido - (columnas - 1) * separacion) / columnas;
+
+                return SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: anchoMaximo),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _EncabezadoDispositivos(
+                              cantidad: dispositivos.length,
+                            ),
+                            const SizedBox(height: 20),
+                            Wrap(
+                              spacing: separacion,
+                              runSpacing: separacion,
+                              children: dispositivos.map((dispositivo) {
+                                SalonModel? salon;
+
+                                for (final elemento in salones) {
+                                  if (elemento.id == dispositivo.salonId) {
+                                    salon = elemento;
+                                    break;
+                                  }
+                                }
+
+                                return SizedBox(
+                                  width: anchoTarjeta,
+                                  child: _TarjetaDispositivo(
+                                    dispositivo: dispositivo,
+                                    salon: salon,
+                                    salones: salones,
+                                    esAdministrador: esAdministrador,
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           );
         },
@@ -177,9 +197,7 @@ class DevicesScreen extends ConsumerWidget {
 class _EncabezadoDispositivos extends StatelessWidget {
   final int cantidad;
 
-  const _EncabezadoDispositivos({
-    required this.cantidad,
-  });
+  const _EncabezadoDispositivos({required this.cantidad});
 
   @override
   Widget build(BuildContext context) {
@@ -193,10 +211,7 @@ class _EncabezadoDispositivos extends StatelessWidget {
             children: [
               const Text(
                 'Dispositivos registrados',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               Text(
                 '$cantidad ${cantidad == 1 ? 'dispositivo encontrado' : 'dispositivos encontrados'}',
@@ -225,10 +240,7 @@ class _TarjetaDispositivo extends ConsumerWidget {
     required this.esAdministrador,
   });
 
-  Future<void> _asignarSalon(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
+  Future<void> _asignarSalon(BuildContext context, WidgetRef ref) async {
     final Map<String, SalonModel> salonesUnicos = {};
 
     for (final elemento in salones) {
@@ -244,10 +256,9 @@ class _TarjetaDispositivo extends ConsumerWidget {
     final salonActualId = dispositivo.salonId;
 
     String salonSeleccionado =
-        salonActualId != null &&
-                salonesUnicos.containsKey(salonActualId)
-            ? salonActualId
-            : '';
+        salonActualId != null && salonesUnicos.containsKey(salonActualId)
+        ? salonActualId
+        : '';
 
     final resultado = await showDialog<String>(
       context: context,
@@ -262,9 +273,7 @@ class _TarjetaDispositivo extends ConsumerWidget {
                 children: [
                   Text(
                     'Dispositivo: ${dispositivo.deviceId}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
@@ -327,10 +336,7 @@ class _TarjetaDispositivo extends ConsumerWidget {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.pop(
-                      dialogContext,
-                      salonSeleccionado,
-                    );
+                    Navigator.pop(dialogContext, salonSeleccionado);
                   },
                   child: const Text('Guardar'),
                 ),
@@ -348,35 +354,27 @@ class _TarjetaDispositivo extends ConsumerWidget {
     if (nuevoSalonId == dispositivo.salonId) return;
 
     try {
-      await ref.read(deviceServiceProvider).asignarSalon(
-        deviceId: dispositivo.deviceId,
-        salonId: nuevoSalonId,
-      );
+      await ref
+          .read(deviceServiceProvider)
+          .asignarSalon(deviceId: dispositivo.deviceId, salonId: nuevoSalonId);
 
       ref.invalidate(devicesProvider);
 
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Asignación actualizada correctamente.'),
-        ),
+        const SnackBar(content: Text('Asignación actualizada correctamente.')),
       );
     } catch (error) {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No se pudo asignar el salón: $error'),
-        ),
+        SnackBar(content: Text('No se pudo asignar el salón: $error')),
       );
     }
   }
 
-  Future<void> _mostrarQr(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
+  Future<void> _mostrarQr(BuildContext context, WidgetRef ref) async {
     try {
       final qrDataUrl = await ref
           .read(deviceServiceProvider)
@@ -387,9 +385,7 @@ class _TarjetaDispositivo extends ConsumerWidget {
       final partes = qrDataUrl.split(',');
 
       if (partes.length < 2) {
-        throw Exception(
-          'El formato de la imagen QR no es válido.',
-        );
+        throw Exception('El formato de la imagen QR no es válido.');
       }
 
       final imagenBytes = base64Decode(partes.last);
@@ -410,9 +406,7 @@ class _TarjetaDispositivo extends ConsumerWidget {
               const SizedBox(height: 12),
               Text(
                 dispositivo.deviceId,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -445,8 +439,7 @@ class _TarjetaDispositivo extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
 
-    final tieneFoto =
-        salon?.fotoUrl != null && salon!.fotoUrl!.isNotEmpty;
+    final tieneFoto = salon?.fotoUrl != null && salon!.fotoUrl!.isNotEmpty;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -463,21 +456,14 @@ class _TarjetaDispositivo extends ConsumerWidget {
               fit: BoxFit.cover,
               placeholder: const SizedBox(
                 height: 150,
-                child: Center(
-                  child: CircularProgressIndicator(),
-                ),
+                child: Center(child: CircularProgressIndicator()),
               ),
               errorWidget: Container(
                 height: 120,
                 width: double.infinity,
-                color: Theme.of(context)
-                    .colorScheme
-                    .surfaceContainerHighest,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: const Center(
-                  child: Icon(
-                    Icons.image_not_supported_outlined,
-                    size: 40,
-                  ),
+                  child: Icon(Icons.image_not_supported_outlined, size: 40),
                 ),
               ),
             ),
@@ -492,9 +478,7 @@ class _TarjetaDispositivo extends ConsumerWidget {
             ),
             title: Text(
               dispositivo.deviceId,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -503,19 +487,12 @@ class _TarjetaDispositivo extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      const Icon(
-                        Icons.meeting_room_outlined,
-                        size: 16,
-                      ),
+                      const Icon(Icons.meeting_room_outlined, size: 16),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          salon != null
-                              ? salon!.nombre
-                              : 'Sin salón asignado',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                          ),
+                          salon != null ? salon!.nombre : 'Sin salón asignado',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -538,9 +515,7 @@ class _TarjetaDispositivo extends ConsumerWidget {
                       ),
                       IconButton(
                         tooltip: 'Asignar o cambiar salón',
-                        icon: const Icon(
-                          Icons.edit_location_alt_outlined,
-                        ),
+                        icon: const Icon(Icons.edit_location_alt_outlined),
                         onPressed: () => _asignarSalon(context, ref),
                       ),
                     ],
@@ -552,5 +527,3 @@ class _TarjetaDispositivo extends ConsumerWidget {
     );
   }
 }
-
-

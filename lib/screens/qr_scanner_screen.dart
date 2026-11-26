@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -52,7 +51,6 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
   Future<void> _procesarCodigo(BarcodeCapture capture) async {
     if (_procesando || _disposed) return;
 
-    // Consultar el perfil más reciente.
     final usuarioActual =
         ref.read(currentUserDataProvider).asData?.value;
 
@@ -91,13 +89,11 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
     _procesando = true;
 
     try {
-      // Detener la cámara mientras se procesa el dispositivo.
       await _controller.stop();
       _camaraDetenida = true;
 
       if (!mounted || _disposed) return;
 
-      // 1. Comprobar nuevamente la autorización.
       final usuarioAntesDeConsultar =
           ref.read(currentUserDataProvider).asData?.value;
 
@@ -109,14 +105,12 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
         return;
       }
 
-      // 2. Validar que el dispositivo exista en el backend.
       await ref
           .read(deviceServiceProvider)
           .obtenerDispositivo(deviceId);
 
       if (!mounted || _disposed) return;
 
-      // 3. Comprobar nuevamente la autorización antes de vincular.
       final usuarioAntesDeGuardar =
           ref.read(currentUserDataProvider).asData?.value;
 
@@ -128,7 +122,6 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
         return;
       }
 
-      // Usar el UID del perfil actual, no uno potencialmente desactualizado.
       final referencia = FirebaseDatabase.instance.ref(
         'users/${usuarioAntesDeGuardar!.uid}/dispositivos_vinculados/$deviceId',
       );
@@ -137,10 +130,8 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
 
       if (!mounted || _disposed) return;
 
-      // 4. Guardar el dispositivo en el perfil del usuario.
       await referencia.set(true);
 
-      // Actualizar los datos del usuario en Riverpod.
       ref.invalidate(currentUserDataProvider);
 
       if (!mounted || _disposed) return;
@@ -151,7 +142,6 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
             : '¡Dispositivo agregado correctamente!',
       );
 
-      // 5. Abrir los detalles del dispositivo.
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -168,8 +158,6 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
         esError: true,
       );
     } finally {
-      // Reactivar la cámara únicamente si la pantalla sigue abierta
-      // y nosotros mismos la habíamos detenido.
       if (mounted && !_disposed) {
         if (_camaraDetenida) {
           try {
@@ -216,7 +204,11 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Escanear dispositivo'),
+        title: const Text(
+          'Escanear dispositivo',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           Builder(
@@ -258,100 +250,168 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
     );
   }
 
-  Widget _contenidoScanner() {
-    return Column(
-      children: [
-        const Padding(
-          padding: EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Icon(
-                Icons.qr_code_scanner,
-                size: 48,
-              ),
-              SizedBox(height: 12),
-              Text(
-                'Escanea el código QR del dispositivo',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Coloca el código dentro del recuadro para '
-                'consultar y guardar el dispositivo.',
-                textAlign: TextAlign.center,
-              ),
-            ],
+  Widget _construirInstrucciones({bool compacto = false}) {
+    return Padding(
+      padding: EdgeInsets.all(compacto ? 12 : 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.qr_code_scanner,
+            size: compacto ? 36 : 48,
           ),
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  MobileScanner(
-                    controller: _controller,
-                    onDetect: _procesarCodigo,
-                    errorBuilder: (context, error) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.camera_alt_outlined,
-                                size: 56,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'No se pudo iniciar la cámara: '
-                                '${error.errorCode.name}',
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
+          SizedBox(height: compacto ? 8 : 12),
+          Text(
+            'Escanea el código QR del dispositivo',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: compacto ? 16 : 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Coloca el código dentro del recuadro para consultar '
+            'y guardar el dispositivo.',
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _construirCamara() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final ladoBase = constraints.maxWidth < constraints.maxHeight
+              ? constraints.maxWidth
+              : constraints.maxHeight;
+
+          final lado = ladoBase * 0.72;
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              MobileScanner(
+                controller: _controller,
+                onDetect: _procesarCodigo,
+                errorBuilder: (context, error) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.camera_alt_outlined,
+                            size: 56,
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                  IgnorePointer(
-                    child: Center(
-                      child: Container(
-                        width: 240,
-                        height: 240,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: Colors.white,
-                            width: 4,
+                          const SizedBox(height: 12),
+                          Text(
+                            'No se pudo iniciar la cámara: '
+                            '${error.errorCode.name}',
+                            textAlign: TextAlign.center,
                           ),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
+                        ],
                       ),
                     ),
+                  );
+                },
+              ),
+              IgnorePointer(
+                child: Center(
+                  child: Container(
+                    width: lado,
+                    height: lado,
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: Colors.white,
+                        width: 4,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
                   ),
-                ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _construirBotonLinterna() {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: OutlinedButton.icon(
+        onPressed: () => _controller.toggleTorch(),
+        icon: const Icon(Icons.flashlight_on),
+        label: const Text('Activar o desactivar linterna'),
+      ),
+    );
+  }
+
+  Widget _contenidoScanner() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final ancho = constraints.maxWidth;
+        final alto = constraints.maxHeight;
+
+        final horizontal = ancho >= 800;
+
+        if (horizontal) {
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: 1400,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: ancho * 0.30 > 360
+                          ? 360
+                          : ancho * 0.30,
+                      child: _construirInstrucciones(),
+                    ),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: _construirCamara(),
+                          ),
+                          _construirBotonLinterna(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: OutlinedButton.icon(
-            onPressed: () => _controller.toggleTorch(),
-            icon: const Icon(Icons.flashlight_on),
-            label: const Text(
-              'Activar o desactivar linterna',
+          );
+        }
+
+        final compacto = alto < 500;
+
+        return Column(
+          children: [
+            _construirInstrucciones(
+              compacto: compacto,
             ),
-          ),
-        ),
-      ],
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.all(compacto ? 10 : 20),
+                child: _construirCamara(),
+              ),
+            ),
+            _construirBotonLinterna(),
+          ],
+        );
+      },
     );
   }
 }
@@ -362,31 +422,37 @@ class _AccesoNoAutorizado extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.lock_outline,
-              size: 64,
-              color: Colors.orange.shade700,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Acceso no autorizado',
-              style: TextStyle(
-                fontSize: 19,
-                fontWeight: FontWeight.bold,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: 450,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.lock_outline,
+                size: 64,
+                color: Colors.orange.shade700,
               ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Un administrador debe autorizar tu cuenta '
-              'antes de que puedas escanear dispositivos.',
-              textAlign: TextAlign.center,
-            ),
-          ],
+              const SizedBox(height: 16),
+              const Text(
+                'Acceso no autorizado',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Un administrador debe autorizar tu cuenta '
+                'antes de que puedas escanear dispositivos.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );

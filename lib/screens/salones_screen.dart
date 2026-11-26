@@ -26,7 +26,11 @@ class SalonesScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(esAdministrador ? 'Salones (Edición)' : 'Salones'),
+        title: Text(
+          esAdministrador ? 'Salones (Edición)' : 'Salones',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         centerTitle: true,
         actions: [
           Builder(
@@ -40,29 +44,45 @@ class SalonesScreen extends ConsumerWidget {
           ),
         ],
       ),
-      endDrawer: AppEndDrawer(userData: userData, onLogout: onLogout),
+      endDrawer: AppEndDrawer(
+        userData: userData,
+        onLogout: onLogout,
+      ),
       body: salonesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(
+          child: CircularProgressIndicator(),
+        ),
         error: (error, stack) => Center(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                const SizedBox(height: 12),
-                const Text(
-                  'No se pudieron cargar los salones.',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(error.toString(), textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => ref.invalidate(salonesProvider),
-                  child: const Text('Reintentar'),
-                ),
-              ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    color: Colors.red,
+                    size: 48,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'No se pudieron cargar los salones.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error.toString(),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => ref.invalidate(salonesProvider),
+                    child: const Text('Reintentar'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -84,22 +104,75 @@ class SalonesScreen extends ConsumerWidget {
             onRefresh: () async {
               ref.invalidate(salonesProvider);
             },
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _EncabezadoSalones(cantidad: salonesVisibles.length),
-                const SizedBox(height: 16),
-                ...salonesVisibles.map(
-                  (salon) => _TarjetaSalon(
-                    salon: salon,
-                    esAdministrador: esAdministrador,
-                    onEditar: () => _abrirFormulario(context, salon: salon),
-                    onEliminar: () => _confirmarEliminar(context, ref, salon),
-                    onCambiarEstado: (activo) =>
-                        _cambiarEstado(context, ref, salon, activo),
-                  ),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final esHorizontal =
+                    constraints.maxWidth > constraints.maxHeight;
+
+                final columnas = esHorizontal ? 2 : 1;
+
+                final ancho = (constraints.maxWidth - 32)
+                    .clamp(0.0, 1400.0)
+                    .toDouble();
+
+                const separacion = 16.0;
+
+                final anchoTarjeta =
+                    (ancho - (separacion * (columnas - 1))) /
+                        columnas;
+
+                return ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: 1400,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _EncabezadoSalones(
+                              cantidad: salonesVisibles.length,
+                            ),
+                            const SizedBox(height: 20),
+                            Wrap(
+                              spacing: separacion,
+                              runSpacing: separacion,
+                              children: salonesVisibles.map((salon) {
+                                return SizedBox(
+                                  width: anchoTarjeta,
+                                  child: _TarjetaSalon(
+                                    salon: salon,
+                                    esAdministrador: esAdministrador,
+                                    onEditar: () => _abrirFormulario(
+                                      context,
+                                      salon: salon,
+                                    ),
+                                    onEliminar: () => _confirmarEliminar(
+                                      context,
+                                      ref,
+                                      salon,
+                                    ),
+                                    onCambiarEstado: (activo) =>
+                                        _cambiarEstado(
+                                      context,
+                                      ref,
+                                      salon,
+                                      activo,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           );
         },
@@ -117,7 +190,9 @@ class SalonesScreen extends ConsumerWidget {
   void _abrirFormulario(BuildContext context, {SalonModel? salon}) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => SalonFormScreen(salon: salon)),
+      MaterialPageRoute(
+        builder: (_) => SalonFormScreen(salon: salon),
+      ),
     );
   }
 
@@ -130,9 +205,12 @@ class SalonesScreen extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Eliminar salón'),
-        content: Text(
-          '¿Estás seguro de eliminar "${salon.nombre}"? '
-          'Esta acción no se puede deshacer.',
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Text(
+            '¿Estás seguro de eliminar "${salon.nombre}"? '
+            'Esta acción no se puede deshacer.',
+          ),
         ),
         actions: [
           TextButton(
@@ -140,7 +218,9 @@ class SalonesScreen extends ConsumerWidget {
             child: const Text('Cancelar'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Eliminar'),
           ),
@@ -156,13 +236,16 @@ class SalonesScreen extends ConsumerWidget {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Salón eliminado correctamente.')),
+        const SnackBar(
+          content: Text('Salón eliminado correctamente.'),
+        ),
       );
     } catch (e) {
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     }
   }
 
@@ -173,22 +256,26 @@ class SalonesScreen extends ConsumerWidget {
     bool activo,
   ) async {
     try {
-      await ref
-          .read(salonServiceProvider)
-          .cambiarEstadoSalon(salonId: salon.id, activo: activo);
+      await ref.read(salonServiceProvider).cambiarEstadoSalon(
+            salonId: salon.id,
+            activo: activo,
+          );
 
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(activo ? 'Salón activado.' : 'Salón desactivado.'),
+          content: Text(
+            activo ? 'Salón activado.' : 'Salón desactivado.',
+          ),
         ),
       );
     } catch (e) {
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     }
   }
 }
@@ -200,13 +287,18 @@ class SalonesScreen extends ConsumerWidget {
 class _EncabezadoSalones extends StatelessWidget {
   final int cantidad;
 
-  const _EncabezadoSalones({required this.cantidad});
+  const _EncabezadoSalones({
+    required this.cantidad,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Icon(Icons.meeting_room_outlined, size: 28),
+        const Icon(
+          Icons.meeting_room_outlined,
+          size: 28,
+        ),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -214,12 +306,17 @@ class _EncabezadoSalones extends StatelessWidget {
             children: [
               const Text(
                 'Espacios disponibles',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               Text(
                 '$cantidad ${cantidad == 1 ? 'salón registrado' : 'salones registrados'}',
                 style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant,
                 ),
               ),
             ],
@@ -255,7 +352,7 @@ class _TarjetaSalon extends StatelessWidget {
     final rutaFoto = salon.fotoUrl;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -272,7 +369,9 @@ class _TarjetaSalon extends StatelessWidget {
                     fit: BoxFit.cover,
                     placeholder: Container(
                       color: theme.colorScheme.surfaceContainerHighest,
-                      child: const Center(child: CircularProgressIndicator()),
+                      child: const Center(
+                        child: CircularProgressIndicator(),
+                      ),
                     ),
                     errorWidget: _fotoNoDisponible(theme),
                   ),
@@ -287,6 +386,8 @@ class _TarjetaSalon extends StatelessWidget {
                     Expanded(
                       child: Text(
                         salon.nombre,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -321,9 +422,17 @@ class _TarjetaSalon extends StatelessWidget {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Icon(Icons.business_outlined, size: 18),
+                      const Icon(
+                        Icons.business_outlined,
+                        size: 18,
+                      ),
                       const SizedBox(width: 6),
-                      Text('Edificio ${salon.edificio}'),
+                      Expanded(
+                        child: Text(
+                          'Edificio ${salon.edificio}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -336,14 +445,23 @@ class _TarjetaSalon extends StatelessWidget {
                   Row(
                     children: [
                       Icon(
-                        salon.activo ? Icons.check_circle : Icons.pause_circle,
-                        color: salon.activo ? Colors.green : Colors.orange,
+                        salon.activo
+                            ? Icons.check_circle
+                            : Icons.pause_circle,
+                        color: salon.activo
+                            ? Colors.green
+                            : Colors.orange,
                         size: 18,
                       ),
                       const SizedBox(width: 6),
-                      Text(salon.activo ? 'Activo' : 'Inactivo'),
+                      Text(
+                        salon.activo ? 'Activo' : 'Inactivo',
+                      ),
                       const Spacer(),
-                      Switch(value: salon.activo, onChanged: onCambiarEstado),
+                      Switch(
+                        value: salon.activo,
+                        onChanged: onCambiarEstado,
+                      ),
                     ],
                   ),
                 ],
@@ -375,43 +493,56 @@ class _EstadoVacio extends StatelessWidget {
   final bool esAdministrador;
   final VoidCallback? onAgregar;
 
-  const _EstadoVacio({required this.esAdministrador, this.onAgregar});
+  const _EstadoVacio({
+    required this.esAdministrador,
+    this.onAgregar,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.meeting_room_outlined,
-              size: 80,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 20),
-            Text(
-              esAdministrador
-                  ? 'Todavía no hay salones registrados'
-                  : 'No hay salones disponibles',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              esAdministrador ? 'Comienza registrando el primer espacio.' : 'Por el momento no hay espacios habilitados para consultar.',
-              textAlign: TextAlign.center,
-            ),
-            if (esAdministrador && onAgregar != null) ...[
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: onAgregar,
-                icon: const Icon(Icons.add),
-                label: const Text('Registrar salón'),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 450),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.meeting_room_outlined,
+                size: 80,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurfaceVariant,
               ),
+              const SizedBox(height: 20),
+              Text(
+                esAdministrador
+                    ? 'Todavía no hay salones registrados'
+                    : 'No hay salones disponibles',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                esAdministrador
+                    ? 'Comienza registrando el primer espacio.'
+                    : 'Por el momento no hay espacios habilitados para consultar.',
+                textAlign: TextAlign.center,
+              ),
+              if (esAdministrador && onAgregar != null) ...[
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: onAgregar,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Registrar salón'),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

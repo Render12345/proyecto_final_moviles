@@ -122,10 +122,7 @@ class MyDevicesScreen extends ConsumerWidget {
     final usuarioAsync = ref.watch(currentUserDataProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mis dispositivos'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Mis dispositivos'), centerTitle: true),
       endDrawer: AppEndDrawer(userData: userData, onLogout: onLogout),
       body: usuarioAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -152,10 +149,7 @@ class MyDevicesScreen extends ConsumerWidget {
               .toList();
 
           if (dispositivosVinculados.isEmpty) {
-            return _SinDispositivos(
-              userData: usuario,
-              onLogout: onLogout,
-            );
+            return _SinDispositivos(userData: usuario, onLogout: onLogout);
           }
 
           return _ContenidoMisDispositivos(
@@ -215,10 +209,7 @@ class _SinDispositivos extends StatelessWidget {
   final UserModel userData;
   final Future<void> Function() onLogout;
 
-  const _SinDispositivos({
-    required this.userData,
-    required this.onLogout,
-  });
+  const _SinDispositivos({required this.userData, required this.onLogout});
 
   @override
   Widget build(BuildContext context) {
@@ -251,10 +242,8 @@ class _SinDispositivos extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => QrScannerScreen(
-                      userData: userData,
-                      onLogout: onLogout,
-                    ),
+                    builder: (_) =>
+                        QrScannerScreen(userData: userData, onLogout: onLogout),
                   ),
                 );
               },
@@ -428,27 +417,61 @@ class _ListaDispositivosVinculadosState
 
         return RefreshIndicator(
           onRefresh: _actualizar,
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: dispositivos.length,
-            itemBuilder: (context, index) {
-              final dispositivo = dispositivos[index];
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverToBoxAdapter(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1400),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final ancho = constraints.maxWidth;
 
-              SalonModel? salon;
+                          final columnas = ancho >= 1100
+                              ? 3
+                              : ancho >= 650
+                              ? 2
+                              : 1;
 
-              for (final elemento in widget.salones) {
-                if (elemento.id == dispositivo.salonId) {
-                  salon = elemento;
-                  break;
-                }
-              }
+                          const separacion = 16.0;
 
-              return _TarjetaMiDispositivo(
-                dispositivo: dispositivo,
-                salon: salon,
-                esAdmin: widget.esAdmin,
-              );
-            },
+                          final anchoTarjeta =
+                              (ancho - (separacion * (columnas - 1))) /
+                              columnas;
+
+                          return Wrap(
+                            spacing: separacion,
+                            runSpacing: separacion,
+                            children: dispositivos.map((dispositivo) {
+                              SalonModel? salon;
+
+                              for (final elemento in widget.salones) {
+                                if (elemento.id == dispositivo.salonId) {
+                                  salon = elemento;
+                                  break;
+                                }
+                              }
+
+                              return SizedBox(
+                                width: anchoTarjeta,
+                                child: _TarjetaMiDispositivo(
+                                  dispositivo: dispositivo,
+                                  salon: salon,
+                                  esAdmin: widget.esAdmin,
+                                ),
+                              );
+                            }).toList(),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -496,9 +519,8 @@ class _TarjetaMiDispositivo extends ConsumerWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => DeviceDetailScreen(
-                    deviceId: dispositivo.deviceId,
-                  ),
+                  builder: (_) =>
+                      DeviceDetailScreen(deviceId: dispositivo.deviceId),
                 ),
               );
             },
@@ -598,7 +620,7 @@ class _TarjetaMiDispositivo extends ConsumerWidget {
                     programacionesAsync.isLoading
                         ? 'Cargando programaciones...'
                         : 'Ver programaciones '
-                            '($programacionesPendientes pendientes)',
+                              '($programacionesPendientes pendientes)',
                   ),
                 ),
                 if (!esAdmin) ...[
@@ -747,8 +769,8 @@ class _TarjetaMiDispositivo extends ConsumerWidget {
                                     salonNombre:
                                         salon?.nombre ?? 'Sin aula asignada',
                                     tipo: tipoSeleccionado,
-                                    descripcion:
-                                        descripcionController.text.trim(),
+                                    descripcion: descripcionController.text
+                                        .trim(),
                                   );
 
                               if (!dialogContext.mounted) return;
@@ -784,14 +806,10 @@ class _TarjetaMiDispositivo extends ConsumerWidget {
                         ? const SizedBox(
                             width: 18,
                             height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.send),
-                    label: Text(
-                      guardando ? 'Enviando...' : 'Enviar reporte',
-                    ),
+                    label: Text(guardando ? 'Enviando...' : 'Enviar reporte'),
                   ),
                 ],
               );
@@ -808,10 +826,7 @@ class _TarjetaMiDispositivo extends ConsumerWidget {
   // CREAR PROGRAMACIÓN
   // ============================================================
 
-  Future<void> _mostrarDialogoCrear(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
+  Future<void> _mostrarDialogoCrear(BuildContext context, WidgetRef ref) async {
     int duracionSeleccionada = 2;
     bool guardando = false;
 
@@ -896,9 +911,7 @@ class _TarjetaMiDispositivo extends ConsumerWidget {
                             ref.invalidate(schedulesProvider);
 
                             ref.invalidate(
-                              schedulesForDeviceProvider(
-                                dispositivo.deviceId,
-                              ),
+                              schedulesForDeviceProvider(dispositivo.deviceId),
                             );
 
                             if (!dialogContext.mounted) return;
@@ -937,9 +950,7 @@ class _TarjetaMiDispositivo extends ConsumerWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.power),
-                  label: Text(
-                    guardando ? 'Procesando...' : 'Encender ahora',
-                  ),
+                  label: Text(guardando ? 'Procesando...' : 'Encender ahora'),
                 ),
               ],
             );
@@ -959,9 +970,7 @@ class _TarjetaMiDispositivo extends ConsumerWidget {
   ) async {
     await showDialog<void>(
       context: context,
-      builder: (_) => _DialogoProgramaciones(
-        deviceId: dispositivo.deviceId,
-      ),
+      builder: (_) => _DialogoProgramaciones(deviceId: dispositivo.deviceId),
     );
   }
 }
@@ -1086,9 +1095,7 @@ class _DialogoProgramacionesState
                 itemCount: ordenadas.length,
                 separatorBuilder: (_, _) => const Divider(),
                 itemBuilder: (context, index) {
-                  return _ElementoProgramacion(
-                    programacion: ordenadas[index],
-                  );
+                  return _ElementoProgramacion(programacion: ordenadas[index]);
                 },
               ),
             );
@@ -1137,21 +1144,21 @@ class _ElementoProgramacion extends ConsumerWidget {
                 fueraDeHora
                     ? Icons.warning_amber_rounded
                     : enCurso
-                        ? Icons.power
-                        : pendiente
-                            ? Icons.schedule
-                            : programacion.estaCancelada
-                                ? Icons.cancel_outlined
-                                : Icons.check_circle_outline,
+                    ? Icons.power
+                    : pendiente
+                    ? Icons.schedule
+                    : programacion.estaCancelada
+                    ? Icons.cancel_outlined
+                    : Icons.check_circle_outline,
                 color: fueraDeHora
                     ? Colors.red
                     : enCurso
-                        ? Colors.green
-                        : pendiente
-                            ? Colors.orange
-                            : programacion.estaCancelada
-                                ? Colors.red
-                                : Colors.green,
+                    ? Colors.green
+                    : pendiente
+                    ? Colors.orange
+                    : programacion.estaCancelada
+                    ? Colors.red
+                    : Colors.green,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -1300,9 +1307,7 @@ class _FotoSalon extends StatelessWidget {
         fit: BoxFit.cover,
         placeholder: Container(
           color: Colors.grey.shade200,
-          child: const Center(
-            child: CircularProgressIndicator(),
-          ),
+          child: const Center(child: CircularProgressIndicator()),
         ),
         errorWidget: _fotoNoDisponible(),
       ),
@@ -1324,9 +1329,7 @@ class _FotoSalon extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            salon == null
-                ? 'Salón sin asignar'
-                : 'Sin fotografía del salón',
+            salon == null ? 'Salón sin asignar' : 'Sin fotografía del salón',
             style: TextStyle(color: Colors.grey.shade700),
           ),
         ],

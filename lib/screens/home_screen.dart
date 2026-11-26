@@ -4,7 +4,6 @@ import 'package:proyecto_final_moviles/screens/my_devices_screen.dart';
 
 import '../providers/auth_provider.dart';
 import '../screens/devices_screen.dart';
-import '../screens/qr_scanner_screen.dart';
 import '../components/app_end_drawer.dart';
 import '../services/navigation_service.dart';
 
