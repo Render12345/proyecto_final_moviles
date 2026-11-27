@@ -343,8 +343,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final uiState = ref.watch(loginUiProvider);
     final uiNotifier = ref.read(loginUiProvider.notifier);
     final authService = ref.read(authServiceProvider);
-
-    const verdePrincipal = Color(0xFF087443);
+    const green = Color(0xFF087443);
+    const darkGreen = Color(0xFF123D32);
+    const lime = Color(0xFFDDF36A);
+    const background = Color(0xFFF3F6F2);
 
     ref.listen(firebaseAuthStateProvider, (previous, next) {
       if (previous?.asData?.value != next.asData?.value) {
@@ -354,85 +356,183 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     Future<void> loginGoogle() async {
       uiNotifier.setLoading(true);
-
       try {
         await authService.loginConGoogle();
       } catch (e) {
-        if (mounted) {
-          _mostrarMensaje('Error Google: $e', esError: true);
-        }
+        if (mounted) _mostrarMensaje('Error Google: $e', esError: true);
       } finally {
-        if (mounted) {
-          uiNotifier.setLoading(false);
-        }
+        if (mounted) uiNotifier.setLoading(false);
       }
     }
 
-    Widget construirFormulario(bool compacto) {
+    InputDecoration fieldDecoration({
+      required String label,
+      required IconData icon,
+      Widget? suffix,
+    }) {
+      return InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        suffixIcon: suffix,
+        filled: true,
+        fillColor: const Color(0xFFF7F9F7),
+        floatingLabelStyle: const TextStyle(
+          color: darkGreen,
+          fontWeight: FontWeight.w600,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 18,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFFE1E7E2)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: green, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.red.shade300),
+        ),
+      );
+    }
+
+    Widget brand({required bool onDark}) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: onDark ? lime : green,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              Icons.ac_unit_rounded,
+              color: onDark ? darkGreen : Colors.white,
+              size: 25,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Control Aires',
+                style: TextStyle(
+                  color: onDark ? Colors.white : darkGreen,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                'ITC',
+                style: TextStyle(
+                  color: onDark ? lime : green,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 3,
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    Widget form(bool compact) {
       return Form(
         key: _formKey,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F4F1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _ModeButton(
+                      label: 'Entrar',
+                      selected: !uiState.isRegisterMode,
+                      onTap: uiState.isRegisterMode
+                          ? uiNotifier.toggleRegisterMode
+                          : null,
+                    ),
+                  ),
+                  Expanded(
+                    child: _ModeButton(
+                      label: 'Crear cuenta',
+                      selected: uiState.isRegisterMode,
+                      onTap: !uiState.isRegisterMode
+                          ? uiNotifier.toggleRegisterMode
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: compact ? 16 : 24),
             Text(
               uiState.isRegisterMode ? 'Crear cuenta' : 'Bienvenido',
-              style: Theme.of(context).textTheme.headlineMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                color: darkGreen,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.8,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               uiState.isRegisterMode
-                  ? 'Completa tus datos para registrarte.'
-                  : 'Inicia sesión con tu correo electrónico.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+                  ? 'Configura tu acceso al sistema de clima.'
+                  : 'Accede al panel de Control Aires.',
+              style: const TextStyle(color: Color(0xFF718078)),
             ),
-            SizedBox(height: compacto ? 16 : 28),
-
+            SizedBox(height: compact ? 14 : 24),
             if (uiState.isRegisterMode) ...[
               TextFormField(
                 controller: _nombreCtrl,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre completo',
-                  prefixIcon: Icon(Icons.person_outline),
-                  border: OutlineInputBorder(),
+                decoration: fieldDecoration(
+                  label: 'Nombre completo',
+                  icon: Icons.person_outline_rounded,
                 ),
                 validator: (v) => (v == null || v.trim().isEmpty)
                     ? 'Ingresa tu nombre'
                     : null,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
             ],
-
             TextFormField(
               controller: _emailCtrl,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Correo electrónico',
-                prefixIcon: Icon(Icons.email_outlined),
-                border: OutlineInputBorder(),
+              decoration: fieldDecoration(
+                label: 'Correo electrónico',
+                icon: Icons.alternate_email_rounded,
               ),
               validator: (v) =>
                   (v == null || !v.contains('@')) ? 'Correo inválido' : null,
             ),
-
-            const SizedBox(height: 16),
-
+            const SizedBox(height: 14),
             TextFormField(
               controller: _passCtrl,
               obscureText: uiState.obscurePassword,
-              decoration: InputDecoration(
-                labelText: 'Contraseña',
-                prefixIcon: const Icon(Icons.lock_outline),
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
+              decoration: fieldDecoration(
+                label: 'Contraseña',
+                icon: Icons.lock_outline_rounded,
+                suffix: IconButton(
                   icon: Icon(
                     uiState.obscurePassword
-                        ? Icons.visibility
-                        : Icons.visibility_off,
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
                   ),
                   onPressed: uiNotifier.toggleObscurePassword,
                 ),
@@ -440,7 +540,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               validator: (v) =>
                   (v == null || v.length < 6) ? 'Mínimo 6 caracteres' : null,
             ),
-
             if (!uiState.isRegisterMode)
               Align(
                 alignment: Alignment.centerRight,
@@ -449,14 +548,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: const Text('¿Olvidaste tu contraseña?'),
                 ),
               ),
-
-            SizedBox(height: compacto ? 8 : 16),
-
+            SizedBox(height: compact ? 6 : 12),
             FilledButton(
               onPressed: uiState.isLoading ? null : _submitCorreo,
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                backgroundColor: verdePrincipal,
+                padding: const EdgeInsets.symmetric(vertical: 17),
+                backgroundColor: green,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 0,
               ),
               child: uiState.isLoading
                   ? const SizedBox(
@@ -471,249 +572,337 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       uiState.isRegisterMode ? 'Registrarse' : 'Iniciar sesión',
                     ),
             ),
-
             if (_huellaLista && !uiState.isRegisterMode) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: uiState.isLoading ? null : _loginConHuella,
-                icon: const Icon(Icons.fingerprint),
-                label: const Text('Entrar con huella'),
+                icon: const Icon(Icons.fingerprint_rounded),
+                label: const Text('Acceso biométrico'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  foregroundColor: darkGreen,
+                  side: const BorderSide(color: Color(0xFFC9D5CD)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
               ),
             ],
-
-            const SizedBox(height: 12),
-
-            TextButton(
-              onPressed: () {
-                uiNotifier.setLoading(false);
-                uiNotifier.toggleRegisterMode();
-              },
-              child: Text(
-                uiState.isRegisterMode
-                    ? '¿Ya tienes cuenta? Inicia sesión'
-                    : '¿No tienes cuenta? Regístrate aquí',
-              ),
-            ),
           ],
         ),
       );
     }
 
-    Widget construirPanelOAuth({required bool horizontal}) {
-      final colorTexto = horizontal
-          ? Colors.white
-          : Theme.of(context).colorScheme.onSurface;
-
-      final colorSecundario = horizontal
-          ? Colors.white70
-          : Theme.of(context).colorScheme.onSurfaceVariant;
-
+    Widget socialButtons({required bool onDark}) {
+      final foreground = onDark ? Colors.white : darkGreen;
+      final border = onDark ? Colors.white54 : const Color(0xFFCDD7D0);
       return Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (horizontal) ...[
-            const Icon(Icons.ac_unit_rounded, size: 76, color: Colors.white),
-            const SizedBox(height: 18),
-            Text(
-              'Control Aires ITC',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineMedium
-                  ?.copyWith(color: colorTexto, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Gestiona y controla los dispositivos de aire acondicionado '
-              'de tu institución.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: colorSecundario, fontSize: 15),
-            ),
-            const SizedBox(height: 36),
-            Text(
-              'Accede también con',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: colorTexto, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 18),
-          ] else ...[
-            const Divider(height: 32),
-            Text(
-              'O continúa con',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: colorSecundario),
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          OutlinedButton.icon(
-            onPressed: uiState.isLoading ? null : loginGoogle,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: colorTexto,
-              side: BorderSide(
-                color: horizontal
-                    ? Colors.white70
-                    : Theme.of(context).dividerColor,
+          Row(
+            children: [
+              Expanded(child: Divider(color: border)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Text(
+                  'o continúa con',
+                  style: TextStyle(
+                    color: onDark ? Colors.white70 : const Color(0xFF7A877F),
+                    fontSize: 12,
+                  ),
+                ),
               ),
-              padding: const EdgeInsets.symmetric(vertical: 15),
-            ),
-            icon: const Icon(Icons.g_mobiledata, size: 28),
-            label: const Text('Continuar con Google'),
+              Expanded(child: Divider(color: border)),
+            ],
           ),
-
           const SizedBox(height: 12),
-
-          OutlinedButton.icon(
-            onPressed: uiState.isLoading ? null : _iniciarConGitHub,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: colorTexto,
-              side: BorderSide(
-                color: horizontal
-                    ? Colors.white70
-                    : Theme.of(context).dividerColor,
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: uiState.isLoading ? null : loginGoogle,
+                  icon: const Icon(Icons.g_mobiledata_rounded, size: 24),
+                  label: const Text('Google'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: foreground,
+                    side: BorderSide(color: border),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
               ),
-              padding: const EdgeInsets.symmetric(vertical: 15),
-            ),
-            icon: const Icon(Icons.code),
-            label: const Text('Continuar con GitHub'),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: uiState.isLoading ? null : _iniciarConGitHub,
+                  icon: const Icon(Icons.code_rounded, size: 19),
+                  label: const Text('GitHub'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: foreground,
+                    side: BorderSide(color: border),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-
-          if (horizontal) ...[
-            const SizedBox(height: 32),
-            Text(
-              'Un acceso sencillo y seguro para administrar '
-              'los equipos de tu institución.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: colorSecundario, fontSize: 12),
-            ),
-          ],
         ],
       );
     }
 
     return Scaffold(
-      resizeToAvoidBottomInset: true,
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final ancho = constraints.maxWidth;
-            final alto = constraints.maxHeight;
+      backgroundColor: background,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 780;
+          final compact = constraints.maxHeight < 620;
 
-            final usarDosColumnas = ancho >= 700;
-            final compacto = alto < 500;
-
-            if (usarDosColumnas) {
-              return SizedBox(
-                height: alto,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // PANEL IZQUIERDO: OAuth
-                    Expanded(
-                      flex: 4,
-                      child: Container(
-                        color: verdePrincipal,
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 20,
-                          ),
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(minHeight: alto - 40),
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 360,
+          if (wide) {
+            return Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 42,
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 18),
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        color: darkGreen,
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Positioned(
+                            right: -90,
+                            top: -70,
+                            child: Container(
+                              width: 230,
+                              height: 230,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  width: 38,
                                 ),
-                                child: construirPanelOAuth(horizontal: true),
                               ),
                             ),
+                          ),
+                          SingleChildScrollView(
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                compact ? 26 : 42,
+                                compact ? 22 : 38,
+                                compact ? 26 : 42,
+                                compact ? 22 : 34,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  brand(onDark: true),
+                                  SizedBox(height: compact ? 18 : 48),
+                                  Container(
+                                    width: compact ? 58 : 86,
+                                    height: compact ? 58 : 86,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.08,
+                                      ),
+                                      borderRadius: BorderRadius.circular(
+                                        compact ? 18 : 24,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.thermostat_auto_rounded,
+                                      color: lime,
+                                      size: compact ? 34 : 48,
+                                    ),
+                                  ),
+                                  SizedBox(height: compact ? 14 : 24),
+                                  Text(
+                                    'El clima de tu\ninstitución, a control.',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineLarge
+                                        ?.copyWith(
+                                          color: Colors.white,
+                                          fontSize: compact ? 30 : null,
+                                          height: 1.05,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                  ),
+                                  SizedBox(height: compact ? 8 : 14),
+                                  Text(
+                                    'Monitorea, configura y mantiene tus equipos en un solo lugar.',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.72,
+                                      ),
+                                      height: 1.4,
+                                      fontSize: compact ? 13 : 14,
+                                    ),
+                                  ),
+                                  SizedBox(height: compact ? 18 : 42),
+                                  socialButtons(onDark: true),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 58,
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: constraints.maxWidth >= 1100 ? 54 : 28,
+                          vertical: compact ? 12 : 24,
+                        ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 520),
+                          child: Container(
+                            padding: EdgeInsets.fromLTRB(
+                              30,
+                              compact ? 22 : 34,
+                              30,
+                              compact ? 20 : 30,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                color: const Color(0xFFE4EAE5),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: darkGreen.withValues(alpha: 0.07),
+                                  blurRadius: 36,
+                                  offset: const Offset(0, 16),
+                                ),
+                              ],
+                            ),
+                            child: form(compact),
                           ),
                         ),
                       ),
                     ),
+                  ),
+                ],
+              ),
+            );
+          }
 
-                    // PANEL DERECHO: Formulario
-                    Expanded(
-                      flex: 6,
-                      child: Container(
-                        color: Theme.of(context).scaffoldBackgroundColor,
-                        child: SingleChildScrollView(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: ancho >= 1000 ? 48 : 20,
-                            vertical: compacto ? 12 : 24,
-                          ),
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minHeight: alto - (compacto ? 24 : 48),
-                            ),
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 460,
-                                ),
-                                child: construirFormulario(compacto),
-                              ),
-                            ),
-                          ),
-                        ),
+          return SafeArea(
+            child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(18, compact ? 10 : 18, 18, 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                      decoration: BoxDecoration(
+                        color: darkGreen,
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      child: brand(onDark: true),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: EdgeInsets.fromLTRB(
+                        20,
+                        compact ? 18 : 24,
+                        20,
+                        20,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(color: const Color(0xFFE2E8E3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          form(compact),
+                          const SizedBox(height: 14),
+                          socialButtons(onDark: false),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              );
-            }
-
-            // Diseño de una columna para celulares y pantallas estrechas.
-            return SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 460),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Icon(
-                        Icons.ac_unit_rounded,
-                        size: 64,
-                        color: verdePrincipal,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Control Aires ITC',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 28),
-
-                      construirFormulario(compacto),
-
-                      construirPanelOAuth(horizontal: false),
-                    ],
-                  ),
-                ),
               ),
-            );
-          },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ModeButton extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const _ModeButton({required this.label, required this.selected, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(11),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(11),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF123D32).withValues(alpha: 0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? const Color(0xFF123D32) : const Color(0xFF7A877F),
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            fontSize: 13,
+          ),
         ),
       ),
     );
   }
 }
 
-
 class VerifyEmailScreen extends ConsumerStatefulWidget {
   const VerifyEmailScreen({super.key});
 
   @override
-  ConsumerState<VerifyEmailScreen> createState() =>
-      _VerifyEmailScreenState();
+  ConsumerState<VerifyEmailScreen> createState() => _VerifyEmailScreenState();
 }
 
-class _VerifyEmailScreenState
-    extends ConsumerState<VerifyEmailScreen> {
+class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   Timer? _temporizador;
   bool _verificando = false;
   bool _reenviando = false;
@@ -741,8 +930,7 @@ class _VerifyEmailScreenState
 
     try {
       final authService = ref.read(authServiceProvider);
-      final verificado =
-          await authService.verificarSiYaConfirmoCorreo();
+      final verificado = await authService.verificarSiYaConfirmoCorreo();
 
       if (!mounted) return;
 
@@ -773,17 +961,13 @@ class _VerifyEmailScreenState
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Correo de verificación reenviado.'),
-        ),
+        const SnackBar(content: Text('Correo de verificación reenviado.')),
       );
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No se pudo reenviar el correo: $e'),
-        ),
+        SnackBar(content: Text('No se pudo reenviar el correo: $e')),
       );
     } finally {
       if (mounted) {
@@ -827,14 +1011,11 @@ class _VerifyEmailScreenState
               ),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight -
-                      (compacto ? 24 : 48),
+                  minHeight: constraints.maxHeight - (compacto ? 24 : 48),
                 ),
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: 450,
-                    ),
+                    constraints: const BoxConstraints(maxWidth: 450),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
@@ -862,8 +1043,7 @@ class _VerifyEmailScreenState
                         ),
                         SizedBox(height: compacto ? 16 : 24),
                         FilledButton.icon(
-                          onPressed:
-                              _reenviando ? null : _reenviarCorreo,
+                          onPressed: _reenviando ? null : _reenviarCorreo,
                           icon: _reenviando
                               ? const SizedBox(
                                   width: 18,
@@ -898,7 +1078,6 @@ class _VerifyEmailScreenState
     );
   }
 }
-
 
 class _DialogoCredenciales extends StatefulWidget {
   final String correoPendiente;
